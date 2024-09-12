@@ -71,16 +71,42 @@ class Http2Stream:
         PSEUDO_HEADER = 1
         GENERAL_HEADER = 2
 
+        required_headers = set((key for key in [':method', ':path', ':scheme', ':authority']))
+        checked_headers = set()
+
         last_header = None
 
-        for key, _value in decoded_headers:
+        for key, value in decoded_headers:
+
             if key.isupper():
                 frame = GoAwayFrame(stream_id=self.stream_id, last_stream_id=0, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
                 raise HeaderValidateException(frame, 'Header allows only lower case.')
 
+            if key.startswith(':'):
+                if key in checked_headers:
+                    frame = GoAwayFrame(stream_id=self.stream_id, last_stream_id=0, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
+                    raise HeaderValidateException(frame, f'Duplicated pseudo headers. header: {key}')
+
+                checked_headers.add(key)
+
             if key.startswith(':') and key not in [':method', ':path', ':scheme', ':authority']:
                 frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
                 raise HeaderValidateException(frame, f'Unknown pseudo headers: {key}')
+
+            if key == ':path' and value == '':
+                frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
+                raise HeaderValidateException(frame, 'The value of :path header cannot be empty.')
+
+            # HTTP/2 should send protocol ERROR when client try to send request with HTTP/1.x headers
+            if key.lower() in ['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'upgrade']:
+                frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
+                raise HeaderValidateException(frame, f'HTTP/2 does not support headers which is used in HTTP/1.: {key}')
+
+            # HTTP/2 spec
+            if key.lower() == 'te' and value != 'trailers':
+                frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
+                raise HeaderValidateException(frame, f'Invalid header. Only "trailers" is allowed for "te" header value. actual : {value}')
+
 
             this_header = PSEUDO_HEADER if key.startswith(':') else GENERAL_HEADER
 
@@ -88,6 +114,11 @@ class Http2Stream:
                 frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
                 raise HeaderValidateException(frame, 'The pseudo-header field should appear before regular header field.')
             last_header = this_header
+
+        for required_header in required_headers:
+            if required_header not in checked_headers:
+                frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
+                raise HeaderValidateException(frame, f'The pseudo header is missed. missed one is {required_header}')
 
     # :method, :path, :schem, :authority
     def update_pseudo_header(self, decoded_headers: list[tuple[str, str]]) -> dict[str, str]:
@@ -136,6 +167,10 @@ class Http2Stream:
         self.header_status = Http2Stream.DONE
 
     def complete_stream(self):
+        if 'content-length' in self.headers and self.headers.get('content-length') != len(self.body):
+            frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
+            raise HeaderValidateException(frame, f'.')
+
         self.stream_status = Http2Stream.DONE
 
     def update_window(self, window_size):
@@ -427,7 +462,7 @@ async def parse_http2_frame(client_reader: StreamReader, client_writer: StreamWr
 
             try:
                 frame, length = Frame.parse_frame_header(frame_header)
-                # print(frame)
+                print(frame, length)
             except hyperframe.frame.InvalidDataError as e:
                 await http2_connection.break_out_frame(0, StreamErrorCode.PROTOCOL_ERROR, client_writer)
                 continue
@@ -453,8 +488,8 @@ async def parse_http2_frame(client_reader: StreamReader, client_writer: StreamWr
 
             if isinstance(frame, SettingsFrame):
                 # Client send Ack message as response of Server's Settings Frame.
+                print(frame)
                 if 'ACK' not in frame.flags:
-                    print(frame)
                     if not http2_connection:
                         http2_connection = Http2Connection(frame, client_writer)
 
