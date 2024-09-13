@@ -1,6 +1,7 @@
 from hyperframe.frame import Frame
 from typing import Callable
 from error_code import StreamErrorCode
+from http2_object import Http2Stream
 
 class ConnectionInterface:
     def update_window_size(self, frame: Frame):
@@ -17,19 +18,19 @@ class ConnectionInterface:
         raise NotImplementedError()
 
 
-    def update_stream(self):
+    def update_stream(self, stream_id: int, stream: Http2Stream):
         raise NotImplementedError()
 
 
-    async def completed_partial_stream(self):
+    async def completed_partial_stream(self, stream_id: int, stream: Http2Stream):
         raise NotImplementedError()
 
 
-    def has_been_done(self):
+    def has_been_done(self, stream_id: int):
         raise NotImplementedError()
 
 
-    def find_stream(self):
+    def find_stream(self, stream_id: int, frame: Frame):
         raise NotImplementedError()
 
 
@@ -37,7 +38,7 @@ class ConnectionInterface:
         raise NotImplementedError()
 
 
-    def remove_stream_by_force(self):
+    def remove_stream_by_force(self, stream_id: int):
         raise NotImplementedError()
 
 class Http2ConnectionInterface(ConnectionInterface):
@@ -77,20 +78,20 @@ class Http2ConnectionInterface(ConnectionInterface):
     async def break_out_frame(self, stream_id: int, error_code: StreamErrorCode):
         return await self._break_out_frame(stream_id, error_code)
 
-    def update_stream(self):
-        return self._update_stream()
+    def update_stream(self, stream_id: int, stream: Http2Stream):
+        return self._update_stream(stream_id, stream)
 
-    async def completed_partial_stream(self):
-        return await self._completed_partial_stream()
+    async def completed_partial_stream(self, stream_id: int, stream: Http2Stream):
+        return await self._completed_partial_stream(stream_id, stream)
 
-    def has_been_done(self):
-        return self._has_been_done()
+    def has_been_done(self, stream_id: int):
+        return self._has_been_done(stream_id)
 
-    def find_stream(self):
-        return self._find_stream()
+    def find_stream(self, stream_id: int, frame: Frame):
+        return self._find_stream(stream_id, frame)
 
     def publish_window_update(self):
         return self._publish_window_update()
 
-    def remove_stream_by_force(self):
-        return self._remove_stream_by_force()
+    def remove_stream_by_force(self, stream_id):
+        return self._remove_stream_by_force(stream_id)
