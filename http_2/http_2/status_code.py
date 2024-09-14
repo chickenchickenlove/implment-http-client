@@ -5,22 +5,22 @@ from enum import Enum
 class StatusCode(Enum):
 
     # 1xx
-    CONTINUE = ('Continue', 100)
-    SWITCHING_PROTOCOLS = ('Switching Protocols', 101)
-    PROCESSING = ('Processing', 102)
-    EARLY_HINTS = ('Early Hints ', 103)
+    CONTINUE = (100, 'Continue')
+    SWITCHING_PROTOCOLS = (101, 'Switching Protocols')
+    PROCESSING = (102, 'Processing')
+    EARLY_HINTS = (103, 'Early Hints ')
 
     # 2xx
-    OK = ('OK', 200)
-    CREATED = ('Created', 201)
-    ACCEPTED = ('Accepted', 202)
-    NON_AUTHORITATIVE_INFORMATION = ('Non-Authoritative Information', 203)
-    NO_CONTENT = ('No Content', 204)
-    RESET_CONTENT = ('Reset Content', 205)
-    PARTIAL_CONTENT = ('Partial Content', 206)
-    MULTI_STATUS = ('Multi-Status', 207)
-    ALREADY_REPORTED = ('Already Reported', 208)
-    IM_USED = ('IM Used', 226)
+    OK = (200, 'OK')
+    CREATED = (201, 'Created')
+    ACCEPTED = (202, 'Accepted')
+    NON_AUTHORITATIVE_INFORMATION = (203, 'Non-Authoritative Information')
+    NO_CONTENT = (204, 'No Content')
+    RESET_CONTENT = (205, 'Reset Content')
+    PARTIAL_CONTENT = (206, 'Partial Content')
+    MULTI_STATUS = (207, 'Multi-Status')
+    ALREADY_REPORTED = (208, 'Already Reported')
+    IM_USED = (226, 'IM Used')
 
     # 3xx
     MULTIPLE_CHOICES = (300, 'Multiple Choices')
@@ -76,9 +76,9 @@ class StatusCode(Enum):
     NOT_EXTENDED = (510, 'Not Extended') # (RFC 2774)
     NETWORK_AUTHENTICATION_REQUIRED = (511, 'Network Authentication Required') # (RFC 6585)
 
-    def __init__(self, text: str, status_code: int):
-        self._text = text
+    def __init__(self, status_code: int, text: str):
         self._status_code = status_code
+        self._text = text
 
     @property
     def text(self):

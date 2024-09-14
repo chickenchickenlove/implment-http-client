@@ -24,7 +24,9 @@ class TrieNode:
             return self._dispatch_func
         else:
             first, *remain = path[1:].split('/', 1)
-            child_node = self.children.get('/' + first)
+            child_node = self.children.get('/' + first, None)
+            if not child_node:
+                return None
 
             next_path = '/' + remain[0] if remain else '/'
             return child_node.find(next_path)

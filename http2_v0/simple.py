@@ -3,7 +3,7 @@ import asyncio
 import hpack
 import hyperframe.frame
 
-from protocol_parser import verify_protocol
+from protocol_verifier import verify_protocol
 
 from asyncio.streams import StreamReader, StreamWriter
 from hyperframe.frame import Frame, SettingsFrame, PriorityFrame, HeadersFrame, DataFrame, PushPromiseFrame, PingFrame, WindowUpdateFrame, GoAwayFrame, ContinuationFrame, RstStreamFrame, ExtensionFrame

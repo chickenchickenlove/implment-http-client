@@ -7,7 +7,43 @@ from http2_exception import HeaderValidateException
 from error_code import StreamErrorCode
 
 from http2_exception import SettingsValueException
-from utils import GeneratorWrapper
+# from utils import AsyncGenerator, TerminateAwareAsyncioQue
+
+
+# https://datatracker.ietf.org/doc/html/rfc9113#name-stream-states
+class Http2StreamState:
+
+    # For not created stream yet.
+    IDLE = 'IDLE'
+
+    # Related with PushPromise
+    RESERVED = 'RESERVED'
+
+    # A stream in the "open" state may be used by both peers to send frames of any type.
+    # In this state, sending peers observe advertised stream-level flow-control limits (Section 5.2).
+    # From this state, either endpoint can send a frame with an END_STREAM flag set,
+    # which causes the stream to transition into one of the "half-closed" states.
+    # An endpoint sending an END_STREAM flag causes the stream state to become "half-closed (local)";
+    # an endpoint receiving an END_STREAM flag causes the stream state to become "half-closed (remote)".
+    OPEN = 'OPEN'
+
+    # A stream that is "half-closed (remote)" is no longer being used by the peer to send frames.
+    # In this state, an endpoint is no longer obligated to maintain a receiver flow-control window.
+    #
+    # If an endpoint receives additional frames, other than WINDOW_UPDATE, PRIORITY, or RST_STREAM, for a stream that is in this state, it MUST respond with a stream error (Section 5.4.2) of type STREAM_CLOSED.
+    #
+    # A stream that is "half-closed (remote)" can be used by the endpoint to send frames of any type. In this state, the endpoint continues to observe advertised stream-level flow-control limits (Section 5.2).
+    #
+    # A stream can transition from this state to "closed" by sending a frame with the END_STREAM flag set or when either peer sends a RST_STREAM frame.
+    HALF_CLOSED = 'HALF_CLOSED'
+
+    # Boty server and client send END_STREAM FLAG. so Both can't send any request at all.
+    CLOSE = 'CLOSED'
+
+class Http2StreamAction:
+
+    UPDATE_HEADER = 'UPDATE_HEADER'
+    UPDATE_DATA = 'UPDATE_DATA'
 
 
 class Http2Stream:
@@ -16,28 +52,79 @@ class Http2Stream:
     UPDATING = 'UPDATING'
     DONE = 'DONE'
 
+    PSEUDO_HEADER = 1
+    GENERAL_HEADER = 2
+
     def __init__(self,
                  stream_id: int,
-                 init_window: int
-                 ):
+                 init_window: int):
         self.stream_id = stream_id
         self.client_remain_window = init_window
-        self.headers = {}
         self.raw_headers = b''
-        self.body = b''
+        self.raw_body = b''
+
+        self.headers = {}
+        self.body = ''
 
         self.header_status = Http2Stream.INIT
         self.stream_status = Http2Stream.INIT
-        self.subscriber = asyncio.Queue()
+        self.subscriber = TerminateAwareAsyncioQue()
+        self.state = Http2StreamState.OPEN
 
     def update(self):
         self.stream_status = Http2Stream.UPDATING
 
+    def close_state(self):
+        self.state = Http2StreamState.CLOSE
+
+    def is_allowed_frame(self, frame: Frame):
+
+        # https://datatracker.ietf.org/doc/html/rfc9113#section-5.1-7.8.1
+        # A stream in the "open" state may be used by both peers to send frames of any type.
+        # In this state, sending peers observe advertised stream-level flow-control limits (Section 5.2).
+        if self.state == Http2StreamState.OPEN:
+            return True, None
+
+        # STATE IS HALF_CLOSED. (Server got END_STREAM FLAG, however not END_HEADERS FLAG yet)
+        if self.state == Http2StreamState.HALF_CLOSED:
+            if self.header_status == Http2Stream.DONE:
+
+                # If an endpoint receives additional frames, other than WINDOW_UPDATE, PRIORITY, or RST_STREAM,
+                # for a stream that is in this state, it MUST respond with a stream error (Section 5.4.2) of type STREAM_CLOSED.
+                if not isinstance(frame, (WindowUpdateFrame, PriorityFrame, RstStreamFrame, SettingsFrame)):
+                    return False, StreamErrorCode.STREAM_CLOSED
+
+            if self.header_status != Http2Stream.DONE:
+                if not isinstance(frame, (WindowUpdateFrame, PriorityFrame, RstStreamFrame, HeadersFrame, ContinuationFrame, SettingsFrame)):
+                    return False, StreamErrorCode.PROTOCOL_ERROR
+
+            # Not Trailer header case. -> invalid status.
+            if self.header_status == Http2Stream.DONE and self.stream_status == Http2Stream.DONE and isinstance(frame, HeadersFrame):
+                return False, StreamErrorCode.STREAM_CLOSED
+
+        if self.state == Http2StreamState.CLOSE:
+            if not isinstance(frame, (PriorityFrame)):
+                return False, StreamErrorCode.PROTOCOL_ERROR
+
+        return True, None
+
+    def is_action_allowed(self, action):
+        # https://datatracker.ietf.org/doc/html/rfc9113#name-headers
+        # HEADERS frames can be sent on a stream in the "idle", "reserved (local)", "open", or "half-closed (remote)" state.
+        if action == Http2StreamAction.UPDATE_HEADER:
+            if self.state == Http2StreamState.HALF_CLOSED and self.header_status == Http2Stream.DONE:
+                raise Exception()
+
+        if action == Http2StreamAction.UPDATE_DATA:
+            if self.state != Http2StreamState.OPEN:
+                raise Exception()
+
+    def update_raw_body(self, data):
+        self.is_action_allowed(Http2StreamAction.UPDATE_DATA)
+        self.raw_body += data
+
     # General Headers should be back of pseudo headers.
     def validate_headers(self, decoded_headers: list[tuple[str, str]]):
-        PSEUDO_HEADER = 1
-        GENERAL_HEADER = 2
-
         required_headers = set((key for key in [':method', ':path', ':scheme', ':authority']))
         checked_headers = set()
 
@@ -67,25 +154,28 @@ class Http2Stream:
             # HTTP/2 should send protocol ERROR when client try to send request with HTTP/1.x headers
             if key.lower() in ['connection', 'keep-alive', 'proxy-connection', 'transfer-encoding', 'upgrade']:
                 frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
-                raise HeaderValidateException(frame, f'HTTP/2 does not support headers which is used in HTTP/1.: {key}')
+                raise HeaderValidateException(frame,
+                      f'HTTP/2 does not support headers which is used in HTTP/1.: {key}')
 
             # HTTP/2 spec
             if key.lower() == 'te' and value != 'trailers':
                 frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
-                raise HeaderValidateException(frame, f'Invalid header. Only "trailers" is allowed for "te" header value. actual : {value}')
+                raise HeaderValidateException(frame,
+                      f'Invalid header. Only "trailers" is allowed for "te" header value. actual : {value}')
 
-
-            this_header = PSEUDO_HEADER if key.startswith(':') else GENERAL_HEADER
+            this_header = Http2Stream.PSEUDO_HEADER if key.startswith(':') else Http2Stream.GENERAL_HEADER
 
             if last_header and (last_header > this_header):
                 frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
-                raise HeaderValidateException(frame, 'The pseudo-header field should appear before regular header field.')
+                raise HeaderValidateException(frame,
+                      'The pseudo-header field should appear before regular header field.')
             last_header = this_header
 
         for required_header in required_headers:
             if required_header not in checked_headers:
                 frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
-                raise HeaderValidateException(frame, f'The pseudo header is missed. missed one is {required_header}')
+                raise HeaderValidateException(
+                    frame, f'The pseudo header is missed. missed one is {required_header}')
 
     # :method, :path, :scheme, :authority
     def update_pseudo_header(self, decoded_headers: list[tuple[str, str]]) -> dict[str, str]:
@@ -101,6 +191,7 @@ class Http2Stream:
                 headers['host'] = value
         return headers
 
+
     def update_general_headers(self, decoded_headers: list[tuple[str, str]]) -> dict[str, str]:
         headers = {}
         for key, value in decoded_headers:
@@ -111,22 +202,19 @@ class Http2Stream:
 
     def update_headers_new(self, decoded_headers: list[tuple[str, str]]):
 
+        self.is_action_allowed(Http2StreamAction.UPDATE_HEADER)
+
         self.validate_headers(decoded_headers)
 
         pseudo_headers = self.update_pseudo_header(decoded_headers)
         general_headers = self.update_general_headers(decoded_headers)
 
-        self.update_headers(pseudo_headers)
-        self.update_headers(general_headers)
-
-    def composite_headers(self):
-        pass
-
-    # TODO: NEED TO BE REMOVED.
-    def update_headers(self, headers: dict):
-        self.headers.update(headers)
+        self.headers.update(pseudo_headers)
+        self.headers.update(general_headers)
 
     def update_raw_headers(self, raw_header: bytes):
+        self.is_action_allowed(Http2StreamAction.UPDATE_HEADER)
+
         self.header_status = Http2Stream.UPDATING
         self.raw_headers += raw_header
 
@@ -136,9 +224,11 @@ class Http2Stream:
     def complete_stream(self):
         if 'content-length' in self.headers and self.headers.get('content-length') != len(self.body):
             frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
-            raise HeaderValidateException(frame, f'.')
+            raise HeaderValidateException(frame, f'Content-Length and Body Size do not match.')
 
+        self.body = self.raw_body.decode()
         self.stream_status = Http2Stream.DONE
+        self.state = Http2StreamState.HALF_CLOSED
 
     def update_window(self, window_size):
         if not (0 <= window_size <= 2**31-1):
@@ -155,24 +245,28 @@ class Http2StreamQueue:
     COMPLETED_QUE_SIZE = 100
 
     def __init__(self):
-        self.streams_in_receiving = {}
-        self.streams: asyncio.Queue = asyncio.Queue()
-        self.streams_in_que = {}
+        # Open State
+        self.streams_in_open = {}
+
+        # Canceled streams.
         self.streams_canceled = set()
-        self.completed_stream_ids = set()
-        self.completed_stream_ids_deque = deque([])
+
+        # Closed State.
+        self.closed_stream_ids = set()
+        self.closed_stream_ids_deque = deque([])
+
+        # Half-closed and header status is done.
+        self.streams: TerminateAwareAsyncioQue = TerminateAwareAsyncioQue()
+        self.streams_in_que = {}
 
     async def publish_end(self):
-        await self.streams.put(GeneratorWrapper.TERM_SIGNAL)
+        await self.streams.send_term_signal()
 
-    def find_stream_in_receiving(self, stream_id: int) -> Http2Stream:
-        return self.streams_in_receiving.get(stream_id)
+    def find_stream_in_open(self, stream_id: int) -> Http2Stream:
+        return self.streams_in_open.get(stream_id)
 
     def find_stream_in_processing(self, stream_id: int) -> Http2Stream:
         return self.streams_in_que.get(stream_id)
-
-    def get_streams_in_receiving(self, stream_id: int) :
-        return self.streams_in_receiving
 
     def get_streams(self):
         return self.streams
@@ -185,34 +279,34 @@ class Http2StreamQueue:
 
     def not_existed_anywhere(self, stream_id):
         return (
-                not self.is_in_receiving(stream_id) and
+                not self.is_in_open(stream_id) and
                 not self.is_in_processing(stream_id) and
                 not self.is_in_completed(stream_id)
                 )
 
-    def is_in_receiving(self, stream_id: int) -> bool:
-        return stream_id in self.streams_in_receiving.keys()
+    def is_in_open(self, stream_id: int) -> bool:
+        return stream_id in self.streams_in_open.keys()
 
     def is_in_processing(self, stream_id: int) -> bool:
         return stream_id in self.streams_in_que.keys()
 
     def is_in_completed(self, stream_id: int) -> bool:
-        return stream_id in self.completed_stream_ids
+        return stream_id in self.closed_stream_ids
 
-    def qsize_in_receiving(self) -> int:
-        return len(self.streams_in_receiving)
+    def qsize_in_open(self) -> int:
+        return len(self.streams_in_open)
 
     def qsize_in_processing(self) -> int:
         return len(self.streams_in_que)
 
     def total_qsize(self) -> int:
-        return self.qsize_in_receiving() + self.qsize_in_processing()
+        return self.qsize_in_open() + self.qsize_in_processing()
 
     def cancel_stream(self, stream_id: int):
         self.streams_canceled.add(stream_id)
 
-    def add_new_stream_in_receiving(self, stream_id: int, new_stream: Http2Stream):
-        self.streams_in_receiving[stream_id] = new_stream
+    def add_new_stream_in_open(self, stream_id: int, new_stream: Http2Stream):
+        self.streams_in_open[stream_id] = new_stream
 
     def is_canceled_stream(self, stream_id: int):
         if stream_id in self.streams_canceled:
@@ -221,33 +315,33 @@ class Http2StreamQueue:
             return True
         return False
 
-    def remove_stream_from_receiving(self, stream_id: int):
-        if self.is_in_receiving(stream_id):
-            del self.streams_in_receiving[stream_id]
+    def remove_stream_from_open(self, stream_id: int):
+        if self.is_in_open(stream_id):
+            del self.streams_in_open[stream_id]
 
-    def maybe_completed_que_overflows(self):
-        if len(self.completed_stream_ids) >= Http2StreamQueue.COMPLETED_QUE_SIZE:
-            stream_id = self.completed_stream_ids_deque.popleft()
-            self.completed_stream_ids.remove(stream_id)
+    def maybe_closed_que_overflows(self):
+        if len(self.closed_stream_ids) >= Http2StreamQueue.COMPLETED_QUE_SIZE:
+            stream_id = self.closed_stream_ids_deque.popleft()
+            self.closed_stream_ids.remove(stream_id)
 
     async def add_new_stream_in_processing(self, stream_id: int, stream: Http2Stream):
         self.streams_in_que[stream_id] = stream
         await self.streams.put(stream)
 
-    def add_completed_stream(self, stream_id: int):
-        self.completed_stream_ids_deque.append(stream_id)
-        self.completed_stream_ids.add(stream_id)
+    def add_closed_stream(self, stream_id: int):
+        self.maybe_closed_que_overflows()
+        self.closed_stream_ids_deque.append(stream_id)
+        self.closed_stream_ids.add(stream_id)
         try:
             del self.streams_in_que[stream_id]
         except Exception:
             pass
 
-    def update_stream_in_receiving(self, stream_id: int, stream: Http2Stream):
-        self.streams_in_receiving[stream_id] = stream
+    def update_stream_in_open(self, stream_id: int, stream: Http2Stream):
+        self.streams_in_open[stream_id] = stream
 
-    def has_been_done(self, stream_id: int) -> bool:
-        return stream_id in self.completed_stream_ids or stream_id in self.streams_in_que.keys()
-
+    def has_been_closed(self, stream_id: int) -> bool:
+        return stream_id in self.closed_stream_ids or stream_id in self.streams_in_que.keys()
 
     async def put_stream(self, stream: Http2Stream):
         await self.streams.put(stream)
@@ -362,3 +456,55 @@ class Http2Settings:
         if v := settings.get(Http2Settings.MAX_HEADER_LIST_SIZE):
             if v < 0:
                 raise SettingsValueException(GoAwayFrame(error_code=StreamErrorCode.PROTOCOL_ERROR.code))
+
+
+
+
+
+
+import asyncio
+import uuid
+from typing import Union
+from http2_object import Http2Stream
+import uuid
+
+
+class TerminateAwareAsyncioQue:
+
+    TERM_SIGNAL = 'TERMINATE' + uuid.uuid1().hex
+    INIT = 'INIT'
+    CLOSED = 'CLOSED'
+
+    def __init__(self):
+        self.que: asyncio.Queue = asyncio.Queue()
+        self.state = TerminateAwareAsyncioQue.INIT
+
+    def should_terminate(self, data: Union[Http2Stream, str, int]) -> bool:
+        if isinstance(data, str) and data == TerminateAwareAsyncioQue.TERM_SIGNAL:
+            self.state = TerminateAwareAsyncioQue.CLOSED
+        return self.state == TerminateAwareAsyncioQue.CLOSED
+
+    async def send_term_signal(self) -> None:
+        await self.que.put(TerminateAwareAsyncioQue.TERM_SIGNAL)
+
+    async def get(self) -> Http2Stream | str | int:
+        return await self.que.get()
+
+    async def put(self, data: Union[Http2Stream, int]) -> None:
+        await self.que.put(data)
+
+
+class AsyncGenerator:
+
+    def __init__(self, streams: TerminateAwareAsyncioQue):
+        self.streams = streams
+        self._closing = False
+
+    async def __aiter__(self):
+        while True:
+            data = await self.streams.get()
+            # https://stackoverflow.com/questions/60226557/how-to-forcefully-close-an-async-generator
+            # We cannot close async generator forcely.
+            if self.streams.should_terminate(data):
+                break
+            yield data
