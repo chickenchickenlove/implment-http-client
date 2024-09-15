@@ -12,9 +12,9 @@ from hpack import Decoder, HPACKDecodingError
 from http2_exception import StopNextException, StopConnectionException
 from http2_object import Http2Stream, Http2StreamQueue, Http2Settings
 from flags import END_STREAM, END_HEADERS
+from abc import ABC
 
-
-class FrameHandler:
+class FrameHandler(ABC):
 
     async def handle(self,
                      frame: Frame,
@@ -69,7 +69,6 @@ class FrameHandler:
 
 
 class SettingsFrameHandler(FrameHandler):
-
 
     # override
     async def maybe_ack(self,

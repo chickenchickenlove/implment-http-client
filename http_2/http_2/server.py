@@ -5,6 +5,7 @@ from typing import Callable
 from data_structure import Trie
 from protocol_verifier import ProtocolVerifier
 
+from http1_connection import Http1Connection
 from http2_connection import Http2Connection
 from generic_http_object import GenericHttpRequest, GenericHttpResponse
 from status_code import StatusCode
@@ -52,6 +53,15 @@ class HttpServerDispatcher:
     def delete_mapping(path: str) -> Callable:
         return HttpServerDispatcher.route(path, ['DELETE'])
 
+    @staticmethod
+    async def graceful_shutdown(timeout: int):
+        # TODO : NEED TO BE
+        # await asyncio.sleep(timeout)
+        # for task in asyncio.all_tasks():
+        #     task.cancel()
+        #     task.done()
+        pass
+
     async def dispatch(self, http_request: GenericHttpRequest, http_response: GenericHttpResponse):
 
         path = http_request.path
@@ -66,7 +76,7 @@ class HttpServerDispatcher:
 
     async def __call__(self, client_reader: StreamReader, client_writer: StreamWriter):
         try:
-            protocol = await ProtocolVerifier.ensure_protocol(client_reader)
+            protocol, first_line = await ProtocolVerifier.ensure_protocol(client_reader)
             match protocol:
                 case 'HTTP/2':
                     connection = await Http2Connection.create(client_reader, client_writer, self.dispatch)
@@ -77,7 +87,8 @@ class HttpServerDispatcher:
                     except Exception as e:
                         print(f'Unexpected Exception occurs. error : {e}')
                     pass
-                case 'HTTP1':
+                case 'HTTP/1':
+                    await Http1Connection(client_reader, client_writer, first_line).handle_request(self.dispatch)
                     pass
                 case _:
                     print('UNKNOWN PROTOCOL')

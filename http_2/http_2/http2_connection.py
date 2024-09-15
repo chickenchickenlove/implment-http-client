@@ -15,7 +15,7 @@ from http2_object import Http2Stream, Http2StreamQueue, Http2Settings, AsyncGene
 from generic_http_object import Http2Request, GenericHttpRequest, Http2ToGenericHttpRequestConverter, GenericHttpResponse, GenericHttpToHttp2ResponseConverter, Http2Response
 from status_code import StatusCode
 
-from frame_handler import HANDLER_STORE
+from frame_handler import HANDLER_STORE, HandlerStore
 
 
 async def send_frame(client_writer: StreamWriter, frame: Frame):
@@ -30,7 +30,7 @@ class Http2Connection:
     @classmethod
     async def create(cls, reader: StreamReader, writer: StreamWriter, dispatch: Callable) -> Self:
         await Http2Connection.send_settings_frame(writer)
-        return Http2Connection(writer, reader, dispatch)
+        return Http2Connection(writer, reader, dispatch, HANDLER_STORE)
 
 
     @staticmethod
@@ -74,7 +74,11 @@ class Http2Connection:
 
         await send_frame(client_writer, settings_frame)
 
-    def __init__(self, writer: StreamWriter, reader: StreamReader, dispatch: Callable):
+    def __init__(self,
+                 writer: StreamWriter,
+                 reader: StreamReader,
+                 dispatch: Callable,
+                 handler_store: HandlerStore) -> Self:
 
         # For Server.
         self.dispatch = dispatch
@@ -92,6 +96,7 @@ class Http2Connection:
 
         self.last_stream_id = 0
         self.last_frame: Union[None, HeadersFrame, DataFrame, ContinuationFrame] = None
+        self.handler_store = handler_store
 
     # This method is for stopping all async generator by sending message 'TERMINATE'
     def _get_all_async_generator(self) -> list[TerminateAwareAsyncioQue]:
@@ -158,11 +163,10 @@ class Http2Connection:
                 frame, body_length = await Http2Connection.read_frame(self.reader, self.writer)
                 frame = await Http2Connection.read_frame_body(self.reader, frame, body_length)
 
-                print(frame)
                 if await self.has_any_violation(frame):
                     continue
 
-                handler = HANDLER_STORE.get_handler(frame)
+                handler = self.handler_store.get_handler(frame)
                 await handler.handle(frame, self.reader, self.writer, connection_callbacks, self.decoder, self.streams_que, self.settings)
 
                 if isinstance(frame, (HeadersFrame, DataFrame)):
@@ -291,7 +295,11 @@ class Http2Connection:
         self.writer.write(frame.serialize())
         await self.writer.drain()
 
-    async def send_response(self, http_request: Http2Request, http_response: Http2Response, writer: StreamWriter):
+    async def send_response(self,
+                            http_request: Http2Request,
+                            http_response: Http2Response,
+                            writer: StreamWriter
+                            ):
         stream_id = http_request.stream.stream_id
 
         # Header Frame does not care about window remain. It will not included to window size.

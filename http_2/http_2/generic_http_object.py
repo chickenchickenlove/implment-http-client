@@ -4,11 +4,91 @@ from http2_object import Http2Stream
 
 
 class Http1Request:
-    pass
+    def __init__(self, msg_dict: dict[str, Union[str, dict]]):
+        if 'method' in msg_dict.keys():
+            self._method: str = msg_dict['method']
+        if 'uri' in msg_dict.keys():
+            self._uri: str = msg_dict['uri']
+        if 'http_version' in msg_dict.keys():
+            self._http_version: str = msg_dict['http_version']
+        if 'headers' in msg_dict.keys():
+            self._headers: dict[str, Union[str, dict]] = msg_dict['headers']
+        if 'body' in msg_dict.keys():
+            self._body: str = msg_dict['body']
+
+    @property
+    def method(self):
+        return self._method
+
+    @property
+    def uri(self):
+        return self._uri
+
+    @property
+    def http_version(self):
+        return self._http_version
+
+    @property
+    def headers(self):
+        return self._headers
+
+    @property
+    def body(self):
+        return self._body
+
+    @property
+    def path(self):
+        return self._uri.split('?')[0]
+
+    @property
+    def query_params(self):
+        query_params_dict = {}
+        # http://example.com/path?key1=value1&key2=value2
+        if len(self._uri.split('?')) > 1:
+            query_param_string = self._uri.split('?')[1]
+            for query_param in query_param_string.split('&'):
+                k, v = query_param.split('=')
+                query_params_dict[k] = v
+        return query_params_dict
 
 
 class Http1Response:
-    pass
+
+    @staticmethod
+    def init_http1_response():
+        return Http1Response(StatusCode.OK, {}, '')
+
+    def __init__(self,
+                 status_code: StatusCode,
+                 headers: dict[str, Union[any, str]],
+                 body: str):
+
+        self._status_code = status_code
+        self._headers = headers
+        self._body = body
+
+    @property
+    def status_code(self):
+        return self._status_code
+
+    @status_code.setter
+    def status_code(self, status_code: StatusCode):
+        self._status_code = status_code
+
+    @property
+    def headers(self):
+        return self._headers
+
+    def update_headers(self, header: dict):
+        self._headers.update(header)
+
+    @property
+    def body(self):
+        return self._body
+
+    @body.setter
+    def body(self, body: str):
+        self._body = str(body)
 
 
 class Http2Request:
@@ -62,16 +142,17 @@ class Http2Response:
                  ):
 
         self.validate_headers(headers)
-        self.response_headers = []
+        self.response_headers = {':status': status_code}
 
-        self.response_headers.append((':status', status_code))
         for key, value in headers.items():
-            header = (key.lower(), value.lower())
-            self.response_headers.append(header)
+            self.response_headers[key.lower()] = value.lower()
 
         self.body: Optional[str] = None
         if body:
             self.body = str(body)
+            self.response_headers['content-length'] = len(self.body)
+            self.response_headers['content-type'] = 'plain/text'
+
 
     def validate_headers(self, headers: dict[str, str]):
         for key in headers.keys():

@@ -11,9 +11,11 @@ class Trie:
     def search(self, path) -> Callable:
         return self.node.find(path)
 
+FORBIDDEN_PATHS = [';', ',', '.']
 
 class TrieNode:
     children: dict[str, Self]
+
 
     def __init__(self):
         self.children = {}
@@ -31,8 +33,16 @@ class TrieNode:
             next_path = '/' + remain[0] if remain else '/'
             return child_node.find(next_path)
 
+    def validate_path(self, path: str):
+        if not path:
+            raise RuntimeError('No path at all.')
+        for forbidden_path in FORBIDDEN_PATHS:
+            if forbidden_path in path:
+                raise RuntimeError(f'Path include forbidden string : {forbidden_path}')
+
     # The first node should be starts with '/'.
     def add(self, path: str, dispatch_func):
+        self.validate_path(path)
         if path == '/':
             self.dispatch_func = dispatch_func
         else:

@@ -1,14 +1,13 @@
+import uuid
 import asyncio
+
+from typing import Union
 
 from hyperframe.frame import Frame, SettingsFrame, PriorityFrame, HeadersFrame, DataFrame, PushPromiseFrame, PingFrame, WindowUpdateFrame, GoAwayFrame, ContinuationFrame, RstStreamFrame, ExtensionFrame
 from collections import deque
 
-from http2_exception import HeaderValidateException
+from http2_exception import HeaderValidateException, SettingsValueException
 from error_code import StreamErrorCode
-
-from http2_exception import SettingsValueException
-# from utils import AsyncGenerator, TerminateAwareAsyncioQue
-
 
 # https://datatracker.ietf.org/doc/html/rfc9113#name-stream-states
 class Http2StreamState:
@@ -58,24 +57,65 @@ class Http2Stream:
     def __init__(self,
                  stream_id: int,
                  init_window: int):
-        self.stream_id = stream_id
-        self.client_remain_window = init_window
-        self.raw_headers = b''
-        self.raw_body = b''
+        self._stream_id = stream_id
+        self._client_remain_window = init_window
+        self._raw_headers = b''
+        self._raw_body = b''
 
-        self.headers = {}
-        self.body = ''
+        self._headers = {}
+        self._body = ''
 
-        self.header_status = Http2Stream.INIT
-        self.stream_status = Http2Stream.INIT
-        self.subscriber = TerminateAwareAsyncioQue()
-        self.state = Http2StreamState.OPEN
+        self._header_status = Http2Stream.INIT
+        self._stream_status = Http2Stream.INIT
+        self._subscriber = TerminateAwareAsyncioQue()
+        self._state = Http2StreamState.OPEN
+
+    @property
+    def stream_id(self):
+        return self._stream_id
+
+    @property
+    def client_remain_window(self):
+        return self._client_remain_window
+
+    @property
+    def raw_headers(self):
+        return self._raw_headers
+
+    @property
+    def raw_body(self):
+        return self._raw_body
+
+    @property
+    def headers(self):
+        return self._headers
+
+    @property
+    def body(self):
+        return self._body
+
+    @property
+    def header_status(self):
+        return self._header_status
+
+    @property
+    def stream_status(self):
+        return self._stream_status
+
+    @property
+    def subscriber(self):
+        return self._subscriber
+
+    @property
+    def state(self):
+        return self._state
+
 
     def update(self):
-        self.stream_status = Http2Stream.UPDATING
+        self._stream_status = Http2Stream.UPDATING
 
     def close_state(self):
-        self.state = Http2StreamState.CLOSE
+        self._state = Http2StreamState.CLOSE
 
     def is_allowed_frame(self, frame: Frame):
 
@@ -121,7 +161,7 @@ class Http2Stream:
 
     def update_raw_body(self, data):
         self.is_action_allowed(Http2StreamAction.UPDATE_DATA)
-        self.raw_body += data
+        self._raw_body += data
 
     # General Headers should be back of pseudo headers.
     def validate_headers(self, decoded_headers: list[tuple[str, str]]):
@@ -215,20 +255,20 @@ class Http2Stream:
     def update_raw_headers(self, raw_header: bytes):
         self.is_action_allowed(Http2StreamAction.UPDATE_HEADER)
 
-        self.header_status = Http2Stream.UPDATING
-        self.raw_headers += raw_header
+        self._header_status = Http2Stream.UPDATING
+        self._raw_headers += raw_header
 
     def complete_headers(self):
-        self.header_status = Http2Stream.DONE
+        self._header_status = Http2Stream.DONE
 
     def complete_stream(self):
         if 'content-length' in self.headers and self.headers.get('content-length') != len(self.body):
             frame = GoAwayFrame(stream_id=self.stream_id, error_code=StreamErrorCode.PROTOCOL_ERROR.code)
             raise HeaderValidateException(frame, f'Content-Length and Body Size do not match.')
 
-        self.body = self.raw_body.decode()
-        self.stream_status = Http2Stream.DONE
-        self.state = Http2StreamState.HALF_CLOSED
+        self._body = self.raw_body.decode()
+        self._stream_status = Http2Stream.DONE
+        self._state = Http2StreamState.HALF_CLOSED
 
     def update_window(self, window_size):
         if not (0 <= window_size <= 2**31-1):
@@ -237,7 +277,7 @@ class Http2Stream:
         if self.client_remain_window + window_size > 2**31-1:
             raise SettingsValueException(RstStreamFrame(stream_id=1, error_code=StreamErrorCode.FLOW_CONTROL_ERROR.code))
 
-        self.client_remain_window = window_size
+        self._client_remain_window = window_size
 
 
 class Http2StreamQueue:
@@ -462,11 +502,7 @@ class Http2Settings:
 
 
 
-import asyncio
-import uuid
-from typing import Union
-from http2_object import Http2Stream
-import uuid
+
 
 
 class TerminateAwareAsyncioQue:
