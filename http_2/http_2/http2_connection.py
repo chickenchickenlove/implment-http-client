@@ -333,45 +333,6 @@ class Http2Connection:
         http_request.stream.close_state()
         del self.window_update_subscriber[http_request.stream.stream_id]
 
-    async def dummy_response(self, http_request: Http2Request, writer: StreamWriter):
-
-        response_headers = [
-            (':status', '200'),
-            ('content-type', 'text/plain-text'),
-        ]
-
-        encoder = Encoder()
-        encoded_headers = encoder.encode(response_headers)
-
-        # Header Frame does not care about window remain. It will not included to window size.
-        response_headers_frame = HeadersFrame(stream_id=http_request.stream.stream_id)  # 요청과 동일한 stream_id 사용
-        response_headers_frame.data = encoded_headers
-        response_headers_frame.flags.add('END_HEADERS')
-        writer.write(response_headers_frame.serialize())
-        await writer.drain()
-        # response_headers_frame.flags.add('END_STREAM')
-
-        # 2. 응답 DATA 프레임 생성 (응답 본문 데이터)
-        response_body = b"1"
-        response_data_frame = DataFrame(stream_id=http_request.stream.stream_id)  # 요청과 동일한 stream_id 사용
-        response_data_frame.data = response_body
-        response_data_frame.flags.add('END_STREAM')
-        data_size = len(response_data_frame.data)
-
-        if http_request.stream.client_remain_window < data_size:
-            print(f'Should wait to send response because of lack of window size.')
-            async for d in AsyncGenerator(http_request.stream.subscriber):
-                if http_request.stream.client_remain_window >= data_size:
-                    print(f'Window size is update. it is possible for stream to send response now.')
-                    break
-
-        self.settings.reduce_connection_window(data_size)
-        writer.write(response_data_frame.serialize())
-        await writer.drain()
-
-        http_request.stream.close_state()
-        del self.window_update_subscriber[http_request.stream.stream_id]
-
     def subscribe(self, stream_id: int, que: TerminateAwareAsyncioQue) -> None:
         self.window_update_subscriber[stream_id] = que
 
