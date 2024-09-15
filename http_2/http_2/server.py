@@ -103,6 +103,21 @@ class HttpServerDispatcher:
             except Exception as e:
                 print(e)
 
+
+class Server:
+
+    def __init__(self, host: str, port: int):
+        self.host = host
+        self.port = port
+
+    async def serve_forever(self):
+        http_server = await asyncio.start_server(HttpServerDispatcher(), self.host, self.port)
+        async with http_server:
+            await asyncio.gather(http_server.serve_forever())
+
+
+
+
 async def main():
     http_server = await asyncio.start_server(HttpServerDispatcher(), '127.0.0.1', 8080)
     async with http_server:

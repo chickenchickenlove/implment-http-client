@@ -1,5 +1,5 @@
 import asyncio
-from server import HttpServerDispatcher
+from server import HttpServerDispatcher, Server
 from generic_http_object import GenericHttpRequest, GenericHttpResponse
 from status_code import StatusCode
 
@@ -26,9 +26,8 @@ async def my_test(http_request: GenericHttpRequest, http_response: GenericHttpRe
 
 
 async def main():
-    http_server = await asyncio.start_server(HttpServerDispatcher(), '127.0.0.1', 8080)
-    async with http_server:
-        await asyncio.gather(http_server.serve_forever())
+    server = Server(host='0.0.0.0', port=8080)
+    await server.serve_forever()
 
 if __name__ == '__main__':
     asyncio.run(main())
