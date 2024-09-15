@@ -1,0 +1,58 @@
+$ curl -o /dev/null -s -w "Total time: %{time_total}\n" http://localhost:8080/hello/ballo -v
+* Host localhost:8080 was resolved.
+* IPv6: ::1
+* IPv4: 127.0.0.1
+*   Trying [::1]:8080...
+* connect to ::1 port 8080 from ::1 port 54401 failed: Connection refused
+*   Trying 127.0.0.1:8080...
+* Connected to localhost (127.0.0.1) port 8080
+> GET /hello/ballo HTTP/1.1
+> Host: localhost:8080
+> User-Agent: curl/8.9.1
+> Accept: */*
+>
+* Request completely sent off
+< HTTP/1.1 200 OK
+< Content-Length: 1
+< Content-Type: text/plain
+<
+{ [1 bytes data]
+* Connection #0 to host localhost left intact
+Total time: 0.000877
+
+
+# FAST API 서버
+$ lsof -i:8081 | wc -l
+    1003
+
+# 내 서버.
+$ lsof -i:8080 | wc -l
+    513
+
+
+python3.1 73865 user    8u  IPv4 0xaf8297d0970d937b      0t0  TCP localhost:56235->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user    9u  IPv4 0xaf8297d095b788e3      0t0  TCP localhost:57149->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   10u  IPv4 0xaf8297d095ee3e4b      0t0  TCP localhost:57292->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   11u  IPv4 0xaf8297d0949bc8e3      0t0  TCP localhost:56147->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   12u  IPv4 0xaf8297d094b0137b      0t0  TCP localhost:56163->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   13u  IPv4 0xaf8297d0964ff3b3      0t0  TCP localhost:57360->localhost:http-alt (ESTABLISHED)
+python3.1 73865 user   14u  IPv4 0xaf8297d0955fe8ab      0t0  TCP localhost:57160->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   15u  IPv4 0xaf8297d095e7d37b      0t0  TCP localhost:56155->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   16u  IPv4 0xaf8297d0951d3e4b      0t0  TCP localhost:57161->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   17u  IPv4 0xaf8297d0958a68ab      0t0  TCP localhost:52527->localhost:http-alt (SYN_SENT)
+python3.1 73865 user   18u  IPv4 0xaf8297d0966dfe4b      0t0  TCP localhost:56787->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   19u  IPv4 0xaf8297d0962b28ab      0t0  TCP localhost:55510->localhost:http-alt (SYN_SENT)
+python3.1 73865 user   20u  IPv4 0xaf8297d096dee8ab      0t0  TCP localhost:55817->localhost:http-alt (SYN_SENT)
+python3.1 73865 user   21u  IPv4 0xaf8297d0959e73b3      0t0  TCP localhost:56567->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   22u  IPv4 0xaf8297d094ea3e4b      0t0  TCP localhost:55535->localhost:http-alt (SYN_SENT)
+python3.1 73865 user   23u  IPv4 0xaf8297d094be5e13      0t0  TCP localhost:57382->localhost:http-alt (ESTABLISHED)
+python3.1 73865 user   24u  IPv4 0xaf8297d0956eb3b3      0t0  TCP localhost:57361->localhost:http-alt (ESTABLISHED)
+python3.1 73865 user   25u  IPv4 0xaf8297d0968e5e13      0t0  TCP localhost:57246->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   26u  IPv4 0xaf8297d095dc33b3      0t0  TCP localhost:56725->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   27u  IPv4 0xaf8297d0970468ab      0t0  TCP localhost:57162->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   28u  IPv4 0xaf8297d0966673b3      0t0  TCP localhost:56159->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   29u  IPv4 0xaf8297d09656de13      0t0  TCP localhost:57137->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   30u  IPv4 0xaf8297d09499b3b3      0t0  TCP localhost:57310->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   31u  IPv4 0xaf8297d094f2fe4b      0t0  TCP localhost:54955->localhost:http-alt (CLOSE_WAIT)
+python3.1 73865 user   32u  IPv4 0xaf8297d0962a5e13      0t0  TCP localhost:57150->localhost:http-alt (CLOSE_WAIT)
+...

@@ -39,11 +39,10 @@ class Http1Connection:
             http_request = Http1Request(client_msg)
             http_response = Http1Response.init_http1_response()
             await dispatch(http_request, http_response)
-            # http_response = await self.handle_request(http_request)
 
             await self.writer.write(http_response, http_request.http_version)
 
-            previous_data_from_buffer = await self.should_continue()
-            if not previous_data_from_buffer or not self.should_keep_alive(http_request):
-                await self.writer.wait_closed()
+            if not self.should_keep_alive(http_request):
                 break
+
+            previous_data_from_buffer = await self.should_continue()
