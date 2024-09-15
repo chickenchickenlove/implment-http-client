@@ -52,7 +52,7 @@ async def main():
 ```
 
 
-## Performance HTTP/1
+## Performance `HTTP/1`
 - HTTP/1 Condition
   - Local M1 Mac.
   - `Locust` load test. 
@@ -76,7 +76,7 @@ Response Time
 | FAST API      | GET    | /hello/ballo  | 93          | 190         | 310         | 440         | 650         | 820         | 1300        | 6700         |
 
 
-## Performance HTTP/1
+## Performance `HTTP/2`
 - HTTP/2 Condition
   - Local M1 Mac.
   - `Locust` load test. (h2 client was integrated to `locust`).
