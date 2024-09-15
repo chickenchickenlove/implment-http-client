@@ -32,3 +32,22 @@
 
 ### FAST API with Uvicorn
 ![img_1.png](img_1.png)
+
+
+
+
+### Reference Server code (FastAPI with uvicorn)
+```python
+import uvicorn
+from fastapi import FastAPI
+
+app = FastAPI()
+
+@app.get("/hello/ballo")
+async def hello_ballo():
+    return 1
+
+
+if __name__ == '__main__':
+    uvicorn.run("main:app", host="0.0.0.0", port=8081, reload=True)
+```

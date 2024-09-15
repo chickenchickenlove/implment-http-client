@@ -30,3 +30,26 @@
 
 ### FAST API with Hypercorn
 ![img_3.png](img_3.png)
+
+
+### Reference Server code (FastAPI with hypercorn)
+```python
+import asyncio
+from fastapi import FastAPI
+from hypercorn.config import Config
+from hypercorn.asyncio import serve
+
+app = FastAPI()
+timeout = Timeout(10.0, connect=5.0)
+
+@app.get("/hello/ballo")
+async def hello_ballo():
+    return 1
+
+
+if __name__ == "__main__":
+    config = Config()
+    config.bind = ["0.0.0.0:8081"]
+
+    asyncio.run(serve(app, config))
+```
