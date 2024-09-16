@@ -9,6 +9,7 @@ from http1_connection import Http1Connection
 from http2_connection import Http2Connection
 from generic_http_object import GenericHttpRequest, GenericHttpResponse
 from status_code import StatusCode
+from ssl_object import SSLConfig
 
 
 class HttpServerDispatcher:
@@ -76,6 +77,7 @@ class HttpServerDispatcher:
 
     async def __call__(self, client_reader: StreamReader, client_writer: StreamWriter):
         try:
+            # client_writer.start_tls()
             protocol, first_line = await ProtocolVerifier.ensure_protocol(client_reader)
             match protocol:
                 case 'HTTP/2':
@@ -106,22 +108,18 @@ class HttpServerDispatcher:
 
 class Server:
 
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, /, ssl_config: SSLConfig):
         self.host = host
         self.port = port
+        self.ssl_config = ssl_config if ssl_config else None
 
     async def serve_forever(self):
-        http_server = await asyncio.start_server(HttpServerDispatcher(), self.host, self.port)
+
+        if self.ssl_config:
+            ssl_context = self.ssl_config.default_ssl_context
+            ssl_context.set_servername_callback(self.ssl_config.sni_callback)
+            http_server = await asyncio.start_server(HttpServerDispatcher(), self.host, self.port, ssl=ssl_context)
+        else:
+            http_server = await asyncio.start_server(HttpServerDispatcher(), self.host, self.port)
         async with http_server:
             await asyncio.gather(http_server.serve_forever())
-
-
-
-
-async def main():
-    http_server = await asyncio.start_server(HttpServerDispatcher(), '127.0.0.1', 8080)
-    async with http_server:
-        await asyncio.gather(http_server.serve_forever())
-
-if __name__ == '__main__':
-    asyncio.run(main())

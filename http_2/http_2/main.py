@@ -1,5 +1,6 @@
 import asyncio
 from server import HttpServerDispatcher, Server
+from ssl_object import SSLConfig
 from generic_http_object import GenericHttpRequest, GenericHttpResponse
 from status_code import StatusCode
 
@@ -24,9 +25,17 @@ async def my_test(http_request: GenericHttpRequest, http_response: GenericHttpRe
     http_response.status_code = StatusCode.OK
     return http_response
 
-
 async def main():
-    server = Server(host='0.0.0.0', port=8080)
+
+    ssl_config = SSLConfig()
+    ssl_config.set_default_tls(certfile_path='/...',
+                               keyfile_path='/...')
+
+    ssl_config.add_tls_with_hostname(hostname='example.com',
+                                     certfile_path='/...',
+                                     keyfile_path='/...')
+
+    server = Server('0.0.0.0', 443, ssl_config)
     await server.serve_forever()
 
 if __name__ == '__main__':
