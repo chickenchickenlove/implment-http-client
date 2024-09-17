@@ -1,5 +1,14 @@
 # The server implementation which supports both HTTP/1 and HTTP/2
 
+### VERSION
+- 0.0.0 : skeleton. (HTTP/1, HTTP/2 with h2c protocol)
+- 0.0.1
+  - Support TLS.
+  - Support HTTP/2 with h2 protocol
+  - Support Virtual server by port and domain by. 
+  - Change interface of using route rule.
+  - Fixes bug that can't response completely when there is no route rule at all.
+
 ```shell
 $ brew install h2spec
 $ cd http_h2

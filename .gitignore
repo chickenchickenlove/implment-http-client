@@ -1,3 +1,13 @@
 .idea
 ./.idea
-./http-1/.idea
+.pytest_cache
+./.pytest_cache
+./http_1/.idea
+./http_1/.pytest_cache
+./http_1/tests/.pytest_cache
+./http_1/http_1/__pycache__
+./http_1/http_1/tests/__pycache__/
+
+*.idea
+*__pycache__
+*pytest_cache
