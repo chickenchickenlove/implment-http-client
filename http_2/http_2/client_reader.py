@@ -154,6 +154,8 @@ class ResponseConverter:
 
         if data:
             self.data.append(data)
+        else :
+            self.data.append('')
 
     def to_byte(self):
         return '\r\n'.join([
