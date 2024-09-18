@@ -104,7 +104,7 @@ class Http2Connection:
         self.last_frame: Union[None, HeadersFrame, DataFrame, ContinuationFrame] = None
         self.handler_store = handler_store
 
-        self._upgrade_obj = upgrade_obj
+        self._upgrade_obj: NeedToChangeProtocolException | None= upgrade_obj
 
     # This method is for stopping all async generator by sending message 'TERMINATE'
     def _get_all_async_generator(self) -> list[TerminateAwareAsyncioQue]:
@@ -169,8 +169,11 @@ class Http2Connection:
         while True:
             try:
 
-                if self._upgrade_obj and self._upgrade_obj.has_next_frame():
+                # For supporting h2c upgrade protocol.
+                if self._upgrade_obj is not None and self._upgrade_obj.has_next_frame():
                     frame = self._upgrade_obj.next_frame
+                    if not self._upgrade_obj.has_next_frame():
+                        self._upgrade_obj = None
                 else:
                     frame, body_length = await Http2Connection.read_frame(self.reader, self.writer)
                     frame = await Http2Connection.read_frame_body(self.reader, frame, body_length)
