@@ -90,6 +90,10 @@ class ClientWriter:
                  writer: StreamWriter):
         self.writer: StreamWriter = writer
 
+    async def write_by_bytes(self, msg: bytes):
+        self.writer.write(msg)
+        await self.writer.drain()
+
     async def write(self, http_response: Http1Response, http_version: str):
         response_byte = self.make_response_bytes(http_response, http_version)
         self.writer.write(response_byte)

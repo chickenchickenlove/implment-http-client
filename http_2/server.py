@@ -2,12 +2,13 @@ import asyncio
 
 from asyncio.streams import StreamReader, StreamWriter
 from typing import Callable
-from data_structure import Trie
-from protocol_verifier import ProtocolVerifier
 
+from protocol_verifier import ProtocolVerifier
+from data_structure import Trie
+from exception import UnknownProtocolException, NeedToChangeProtocolException
 from http1_connection import Http1Connection
 from http2_connection import Http2Connection
-from generic_http_object import GenericHttpRequest, GenericHttpResponse
+from generic_http_object import GenericHttpRequest, GenericHttpResponse, NeedToChangeProtocol
 from status_code import StatusCode
 from ssl_object import SSLConfig, IntegrateSSLConfig
 
@@ -66,25 +67,49 @@ class Server:
             response = await func(http_request, http_response)
             return http_request, response
 
+    async def _handle(self,
+                      client_reader: StreamReader,
+                      client_writer: StreamWriter,
+                      /,
+                      upgrade_protocol: NeedToChangeProtocolException = None) -> None | NeedToChangeProtocol:
 
-    async def handle_request(self, client_reader: StreamReader, client_writer: StreamWriter):
         try:
             protocol, first_line = await ProtocolVerifier.ensure_protocol(client_reader)
+        except UnknownProtocolException as e:
+            print('Client sent message with unknown protocol.')
+            client_writer.close()
+            await client_writer.wait_closed()
+            return
+
+        try:
             match protocol:
                 case 'HTTP/2':
-                    connection = await Http2Connection.create(client_reader, client_writer, self._dispatch)
+                    connection = await Http2Connection.create(client_reader, client_writer, self._dispatch, upgrade_obj=upgrade_protocol)
                     try:
                         async with asyncio.TaskGroup() as tg:
                             tg.create_task(connection.parse_http2_frame())
                             tg.create_task(connection.consume_complete_stream())
                     except Exception as e:
                         print(f'Unexpected Exception occurs. error : {e}')
-                    pass
+                    return
                 case 'HTTP/1':
                     await Http1Connection(client_reader, client_writer, first_line).handle_request(self._dispatch)
-                    pass
                 case _:
                     print('UNKNOWN PROTOCOL')
+        except NeedToChangeProtocolException as upgrade_protocol:
+            raise upgrade_protocol
+        except Exception as e:
+            print(f'handle request exception: {e}')
+
+    async def handle_request(self,
+                             client_reader: StreamReader,
+                             client_writer: StreamWriter):
+        try:
+            await self._handle(client_reader, client_writer)
+        except NeedToChangeProtocolException as upgrade_protocol:
+            client_writer.write(upgrade_protocol.response_msg)
+            await client_writer.drain()
+            await self._handle(client_reader, client_writer, upgrade_protocol)
         except Exception as e:
             print(f'handle request exception: {e}')
         finally:
@@ -245,4 +270,8 @@ class AsyncServerExecutor:
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         for task in self.tasks:
-            task.cancel()
+            try:
+                task.cancel()
+                await task
+            except asyncio.CancelledError:
+                print('Task is fully cancelled and finished.')
