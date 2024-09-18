@@ -1,15 +1,14 @@
 import pytest
-from pyassert import *
-from http_1.data_structure import Trie
+from ..data_structure import Trie
 from typing import Callable
 
 
-def test_trie():
+def test_trie1():
     # When
     trie = Trie()
 
     # Then
-    assert_that(trie.node).is_not_equal_to(None)
+    assert trie.node is not None
 
 
 
@@ -30,7 +29,7 @@ def func3():
         ('/a/b/c/d', func3, func3),
     ]
 )
-def test_trie(path: str,
+def test_trie2(path: str,
               func: Callable,
               expected_func: Callable):
 
@@ -43,7 +42,7 @@ def test_trie(path: str,
 
     # Then
     result = trie.search(path)
-    assert_that(result).is_equal_to(expected_func)
+    assert result == expected_func
 
 
 def test_trie_multiple():
@@ -75,7 +74,7 @@ def test_trie_multiple():
     trie.add(path4, f4)
 
     # Then
-    assert_that(trie.search(path1)).is_equal_to(f1)
-    assert_that(trie.search(path2)).is_equal_to(f2)
-    assert_that(trie.search(path3)).is_equal_to(f3)
-    assert_that(trie.search(path4)).is_equal_to(f4)
+    assert trie.search(path1) == f1
+    assert trie.search(path2) == f2
+    assert trie.search(path3) == f3
+    assert trie.search(path4) == f4

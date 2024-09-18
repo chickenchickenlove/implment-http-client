@@ -7,6 +7,7 @@ from hpack import Decoder, Encoder
 
 from typing import Self, Union, Optional, Callable
 
+from exception import NeedToChangeProtocolException
 from flags import END_STREAM, END_HEADERS
 from interface import Http2ConnectionInterface
 from error_code import StreamErrorCode
@@ -28,9 +29,13 @@ class Http2Connection:
     FRAME_HEADER_LENGTH = 9
 
     @classmethod
-    async def create(cls, reader: StreamReader, writer: StreamWriter, dispatch: Callable) -> Self:
+    async def create(cls,
+                     reader: StreamReader,
+                     writer: StreamWriter,
+                     dispatch: Callable, /,
+                     upgrade_obj: NeedToChangeProtocolException | None = None) -> Self:
         await Http2Connection.send_settings_frame(writer)
-        return Http2Connection(writer, reader, dispatch, HANDLER_STORE)
+        return Http2Connection(writer, reader, dispatch, HANDLER_STORE, upgrade_obj)
 
 
     @staticmethod
@@ -63,7 +68,6 @@ class Http2Connection:
         frame.parse_body(memoryview(frame_payload))
         return frame
 
-
     @staticmethod
     async def send_settings_frame(client_writer: StreamWriter):
         settings_frame = SettingsFrame(stream_id=0)
@@ -78,7 +82,9 @@ class Http2Connection:
                  writer: StreamWriter,
                  reader: StreamReader,
                  dispatch: Callable,
-                 handler_store: HandlerStore) -> Self:
+                 handler_store: HandlerStore,
+                 /,
+                 upgrade_obj: NeedToChangeProtocolException | None = None):
 
         # For Server.
         self.dispatch = dispatch
@@ -97,6 +103,8 @@ class Http2Connection:
         self.last_stream_id = 0
         self.last_frame: Union[None, HeadersFrame, DataFrame, ContinuationFrame] = None
         self.handler_store = handler_store
+
+        self._upgrade_obj = upgrade_obj
 
     # This method is for stopping all async generator by sending message 'TERMINATE'
     def _get_all_async_generator(self) -> list[TerminateAwareAsyncioQue]:
@@ -160,9 +168,14 @@ class Http2Connection:
         frame = None
         while True:
             try:
-                frame, body_length = await Http2Connection.read_frame(self.reader, self.writer)
-                frame = await Http2Connection.read_frame_body(self.reader, frame, body_length)
 
+                if self._upgrade_obj and self._upgrade_obj.has_next_frame():
+                    frame = self._upgrade_obj.next_frame
+                else:
+                    frame, body_length = await Http2Connection.read_frame(self.reader, self.writer)
+                    frame = await Http2Connection.read_frame_body(self.reader, frame, body_length)
+
+                print(frame)
                 if await self.has_any_violation(frame):
                     continue
 
