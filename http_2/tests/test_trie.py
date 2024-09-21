@@ -1,7 +1,7 @@
 import pytest
-from ..data_structure import Trie
 from typing import Callable
 
+from http_2.data_structure import Trie
 
 def test_trie1():
     # When

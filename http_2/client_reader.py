@@ -1,6 +1,5 @@
 import asyncio
-from asyncio.streams import StreamReader, StreamWriter
-from generic_http_object import Http1Response, Http2Response
+from asyncio.streams import StreamReader
 
 class ClientReader:
 
@@ -52,7 +51,8 @@ class ClientReader:
         raw_headers = await self._read_headers_from_message()
         headers = self.transfer_raw_headers_to_dict(raw_headers)
 
-        body = await self._read_body(headers)
+        body_byte = await self._read_body(headers)
+        body = body_byte.decode() if body_byte else ''
         msg_dict = {
             'method': http_method,
             'uri': uri,
@@ -84,46 +84,8 @@ class ClientReader:
         raise NotImplementedError()
 
 
-class ClientWriter:
-
-    def __init__(self,
-                 writer: StreamWriter):
-        self.writer: StreamWriter = writer
-
-    async def write_by_bytes(self, msg: bytes):
-        self.writer.write(msg)
-        await self.writer.drain()
-
-    async def write(self, http_response: Http1Response, http_version: str):
-        response_byte = self.make_response_bytes(http_response, http_version)
-        self.writer.write(response_byte)
-        await self.writer.drain()
-
-    def get_extra_info(self, key: str):
-        return self.writer.transport.get_extra_info(key)
-
-    async def wait_closed(self):
-        self.writer.close()
-        await self.writer.wait_closed()
-
-    def make_response_bytes(self, http_response: Http1Response, http_version: str):
-
-        http_protocol = http_version
-        status_code = http_response.status_code.status_code
-        status_code_text = http_response.status_code.text
-
-        status_line = ' '.join(map(lambda x: str(x), [http_protocol, status_code, status_code_text]))
-
-        response = ResponseConverter()
-        response.append_status(status_line)
-        for key, value in http_response.headers.items():
-            response.append_header_line(f'{key}: {value}')
-
-        response.append_body_line(http_response.body)
-        return response.to_byte()
-
 '''
-# HTTP Response Msg format. 
+# HTTP Response Msg format.
 # Case: 1 (/wo Body)
 HTTP/1.1 200 OK      # Status Line
 Content-Length: 0    # HEADERS LINE
@@ -134,36 +96,3 @@ Content-Length: 4    # HEADERS LINE
                      # EMPTY LINE
 body                 # BODY LINE
 '''
-
-
-class ResponseConverter:
-
-    def __init__(self):
-        self.status_line = []
-        self.headers_line = []
-        self.data = []
-
-    def append_status(self, data):
-        if data:
-            self.status_line.append(data)
-
-    def append_header_line(self, data):
-        if data:
-            self.headers_line.append(data)
-
-    def append_body_line(self, data):
-        data_length = 0 if data is None else len(data)
-        self.headers_line.append(f'Content-Length: {data_length}')
-        self.headers_line.append(f'Content-Type: text/plain')
-
-        if data:
-            self.data.append(data)
-        else :
-            self.data.append('')
-
-    def to_byte(self):
-        return '\r\n'.join([
-            *self.status_line,
-            *self.headers_line,
-            '',
-            *self.data]).encode()

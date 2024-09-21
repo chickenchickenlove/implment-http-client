@@ -2,12 +2,11 @@ import uuid
 import asyncio
 
 from typing import Union
-
 from hyperframe.frame import Frame, SettingsFrame, PriorityFrame, HeadersFrame, DataFrame, PushPromiseFrame, PingFrame, WindowUpdateFrame, GoAwayFrame, ContinuationFrame, RstStreamFrame, ExtensionFrame
 from collections import deque
 
-from http2_exception import HeaderValidateException, SettingsValueException
-from error_code import StreamErrorCode
+from http_2.http2_exception import HeaderValidateException, SettingsValueException
+from http_2.error_code import StreamErrorCode
 
 # https://datatracker.ietf.org/doc/html/rfc9113#name-stream-states
 class Http2StreamState:
