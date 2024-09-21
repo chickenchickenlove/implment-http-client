@@ -3,14 +3,14 @@ import asyncio
 from asyncio.streams import StreamReader, StreamWriter
 from typing import Callable
 
-from protocol_verifier import ProtocolVerifier
-from data_structure import Trie
-from exception import UnknownProtocolException, NeedToChangeProtocolException
-from http1_connection import Http1Connection
-from http2_connection import Http2Connection
-from generic_http_object import GenericHttpRequest, GenericHttpResponse, NeedToChangeProtocol
-from status_code import StatusCode
-from ssl_object import SSLConfig, IntegrateSSLConfig
+from http_2.protocol_verifier import ProtocolVerifier
+from http_2.data_structure import Trie
+from http_2.exception import UnknownProtocolException, NeedToChangeProtocolException
+from http_2.http1_connection import Http1Connection
+from http_2.http2_connection import Http2Connection
+from http_2.common_http_object import GenericHttpRequest, GenericHttpResponse, NeedToChangeProtocol
+from http_2.status_code import StatusCode
+from http_2.ssl_object import SSLConfig, IntegrateSSLConfig
 
 
 class Server:
@@ -64,6 +64,8 @@ class Server:
             http_response.status_code = StatusCode.NOT_FOUND
             return http_request, http_response
         else:
+            # TODO : 이걸 이용하면 Argument Resolve 가능함.
+            # func.__code__.co_varnames
             response = await func(http_request, http_response)
             return http_request, response
 

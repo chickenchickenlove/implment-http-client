@@ -1,7 +1,8 @@
 from hyperframe.frame import Frame
 from typing import Callable
-from error_code import StreamErrorCode
-from http2_object import Http2Stream
+
+from http_2.error_code import StreamErrorCode
+from http_2.http2_object import Http2Stream
 
 class ConnectionInterface:
     async def update_window_size(self, frame: Frame):

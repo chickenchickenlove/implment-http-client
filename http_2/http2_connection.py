@@ -1,20 +1,19 @@
 import asyncio
-from asyncio.streams import StreamReader, StreamWriter
-
 import hyperframe.frame
+
+from asyncio.streams import StreamReader, StreamWriter
 from hyperframe.frame import Frame, SettingsFrame, PriorityFrame, HeadersFrame, DataFrame, PushPromiseFrame, PingFrame, WindowUpdateFrame, GoAwayFrame, ContinuationFrame, RstStreamFrame, ExtensionFrame
 from hpack import Decoder, Encoder
-
 from typing import Self, Union, Optional, Callable
 
-from exception import NeedToChangeProtocolException
-from flags import END_STREAM, END_HEADERS
-from interface import Http2ConnectionInterface
-from error_code import StreamErrorCode
-from http2_exception import Http2ConnectionError, StopConnectionException, SettingsValueException
-from http2_object import Http2Stream, Http2StreamQueue, Http2Settings, AsyncGenerator, TerminateAwareAsyncioQue
-from generic_http_object import Http2Request, GenericHttpRequest, Http2ToGenericHttpRequestConverter, GenericHttpResponse, GenericHttpToHttp2ResponseConverter, Http2Response
-from status_code import StatusCode
+from http_2.exception import NeedToChangeProtocolException
+from http_2.flags import END_STREAM, END_HEADERS
+from http_2.interface import Http2ConnectionInterface
+from http_2.error_code import StreamErrorCode
+from http_2.http2_exception import Http2ConnectionError, StopConnectionException, SettingsValueException
+from http_2.http2_object import Http2Stream, Http2StreamQueue, Http2Settings, AsyncGenerator, TerminateAwareAsyncioQue
+from http_2.common_http_object import Http2Request, GenericHttpRequest, Http2ToGenericHttpRequestConverter, GenericHttpResponse, GenericHttpToHttp2ResponseConverter, Http2Response
+from http_2.status_code import StatusCode
 
 from frame_handler import HANDLER_STORE, HandlerStore
 

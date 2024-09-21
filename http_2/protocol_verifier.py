@@ -1,6 +1,7 @@
 from asyncio.streams import StreamReader, StreamWriter
 from typing import Tuple
-from exception import UnknownProtocolException
+
+from http_2.exception import UnknownProtocolException
 
 
 class ProtocolVerifier:

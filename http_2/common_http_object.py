@@ -3,8 +3,8 @@ import base64
 from hyperframe.frame import SettingsFrame
 from typing import Union, Optional, Literal, Any
 
-from status_code import StatusCode
-from http2_object import Http2Stream
+from http_2.status_code import StatusCode
+from http_2.http2_object import Http2Stream
 
 
 class Http1Request:
@@ -56,43 +56,48 @@ class Http1Request:
         return query_params_dict
 
 
-class Http1Response:
-
-    @staticmethod
-    def init_http1_response():
-        return Http1Response(StatusCode.OK, {}, '')
-
-    def __init__(self,
-                 status_code: StatusCode,
-                 headers: dict[str, Union[any, str]],
-                 body: str):
-
-        self._status_code = status_code
-        self._headers = headers
-        self._body = body
-
-    @property
-    def status_code(self):
-        return self._status_code
-
-    @status_code.setter
-    def status_code(self, status_code: StatusCode):
-        self._status_code = status_code
-
-    @property
-    def headers(self):
-        return self._headers
-
-    def update_headers(self, header: dict):
-        self._headers.update(header)
-
-    @property
-    def body(self):
-        return self._body
-
-    @body.setter
-    def body(self, body: str):
-        self._body = str(body)
+# class Http1Response:
+#
+#     @staticmethod
+#     def init_http1_response():
+#         return Http1Response(StatusCode.OK, {}, '')
+#
+#     def __init__(self,
+#                  status_code: StatusCode,
+#                  headers: dict[str, Union[any, str]],
+#                  body: str):
+#
+#         self._status_code = status_code
+#         self._headers = headers
+#         self._body = body
+#         self._protocol = 'HTTP/1.1'
+#
+#     @property
+#     def protocol(self):
+#         return self._protocol
+#
+#     @property
+#     def status_code(self):
+#         return self._status_code
+#
+#     @status_code.setter
+#     def status_code(self, status_code: StatusCode):
+#         self._status_code = status_code
+#
+#     @property
+#     def headers(self):
+#         return self._headers
+#
+#     def update_headers(self, header: dict):
+#         self._headers.update(header)
+#
+#     @property
+#     def body(self):
+#         return self._body
+#
+#     @body.setter
+#     def body(self, body: str):
+#         self._body = str(body)
 
 
 class Http2Request:
@@ -240,7 +245,6 @@ class GenericHttpResponse:
         self._headers = headers
         self._body = str(body)
 
-
     @property
     def status_code(self):
         return self._status_code
@@ -289,8 +293,6 @@ class GenericHttpToHttp2ResponseConverter:
             original_response.headers,
             original_response.body
         )
-
-
 
 
 class NeedtoResponseException(Exception):
@@ -346,16 +348,16 @@ class NeedToChangeProtocol:
     SETTINGS Frame {
       Length (24),
       Type (8) = 0x04,
-    
+
       Unused Flags (7),
       ACK Flag (1),
-    
+
       Reserved (1),
       Stream Identifier (31) = 0,
-    
+
       Setting (48) ...,
     }
-    
+
     Setting {
       Identifier (16), (2 bytes)
       Value (32), (4 bytes)

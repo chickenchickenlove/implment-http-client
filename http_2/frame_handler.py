@@ -1,18 +1,17 @@
 import logging
 from asyncio.streams import StreamReader, StreamWriter
 from hyperframe.frame import Frame, SettingsFrame, PriorityFrame, HeadersFrame, DataFrame, PushPromiseFrame, PingFrame, WindowUpdateFrame, GoAwayFrame, ContinuationFrame, RstStreamFrame, ExtensionFrame
-
-
-from interface import ConnectionInterface
+from abc import ABC
 from typing import Type, Dict
-from error_code import StreamErrorCode
-
 from hpack import Decoder, HPACKDecodingError
 
-from http2_exception import StopNextException, StopConnectionException
-from http2_object import Http2Stream, Http2StreamQueue, Http2Settings
-from flags import END_STREAM, END_HEADERS
-from abc import ABC
+
+from http_2.interface import ConnectionInterface
+from http_2.error_code import StreamErrorCode
+from http_2.http2_exception import StopNextException, StopConnectionException
+from http_2.http2_object import Http2Stream, Http2StreamQueue, Http2Settings
+from http_2.flags import END_STREAM, END_HEADERS
+
 
 class FrameHandler(ABC):
 
@@ -546,7 +545,11 @@ class UnsupportedFrameHandler(FrameHandler):
     # override
     async def validate(self, frame: Frame, reader: StreamReader, writer: StreamWriter,
                        connection: ConnectionInterface, decoder: Decoder, streams_que: Http2StreamQueue, settings: Http2Settings):
-        raise NotImplementedError(f'No handlers for type {type(frame)}')
+        # https://datatracker.ietf.org/doc/html/rfc9113#name-server-push
+        # A client cannot push. Thus, servers MUST treat the receipt of a PUSH_PROMISE frame
+        # as a connection error (Section 5.4.1) of type PROTOCOL_ERROR.
+        # A server cannot set the SETTINGS_ENABLE_PUSH setting to a value other than 0 (see Section 6.5.2).
+        raise StopConnectionException('')
 
     # override
     async def maybe_ack(self, frame: Frame, reader: StreamReader, writer: StreamWriter,

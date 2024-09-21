@@ -2,12 +2,13 @@ import asyncio
 import pytest
 import socket
 
-from ..exception import NeedToChangeProtocolException
-from ..generic_http_object import GenericHttpRequest, GenericHttpResponse
-from ..status_code import StatusCode
-
 from hyperframe.frame import SettingsFrame, HeadersFrame
 from collections import deque
+
+from http_2.exception import NeedToChangeProtocolException
+from http_2.common_http_object import GenericHttpRequest, GenericHttpResponse
+from http_2.status_code import StatusCode
+from http_2.http1_response import GeneralHttp1Response
 from http_2.server import Server, AsyncServerExecutor
 
 
@@ -26,9 +27,7 @@ async def server(server_port):
 
     @http_localhost_server.route(path='/hello/ballo2', methods=['POST', 'GET'])
     async def return_ok(http_request: GenericHttpRequest, http_response: GenericHttpResponse):
-        http_response.status_code = StatusCode.OK
-        http_response.body = RETURN_RESULT
-        return http_response
+        return GeneralHttp1Response(status_code=StatusCode.OK, body=RETURN_RESULT)
 
     executor = AsyncServerExecutor()
     executor.add_server(http_localhost_server)
