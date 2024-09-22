@@ -2,9 +2,10 @@ import asyncio
 import pytest
 import socket
 
+from http_2.public.request import HttpRequest
+from http_2.public.response import HttpResponse, StreamingResponse
 from http_2.server import Server, AsyncServerExecutor
-from http_2.common_http_object import GenericHttpRequest, GenericHttpResponse
-from http_2.http1_response import StreamingResponse
+
 
 @pytest.fixture
 def server_port():
@@ -18,7 +19,7 @@ async def server(server_port):
     http_localhost_server = Server(server_port)
 
     @http_localhost_server.get_mapping(path='/subscribe')
-    async def return_ok(http_request: GenericHttpRequest, http_response: GenericHttpResponse):
+    async def return_ok(http_request: HttpRequest, http_response: HttpResponse):
         async def gen_contents():
             for i in range(5):
                 await asyncio.sleep(0.1)

@@ -13,6 +13,9 @@ I implement this server to understand how low-level web works, low-level HTTP pr
   - Fixes bug that can't response completely when there is no route rule at all.
 - 0.0.2
   - Support Server Sent Event Feature with HTTP/1.1. 
+- 0.0.3
+  - Support Connection Context and Request Context to inject parameters to endpoint methods.
+  - Internal Refactoring.
 
 ### How to use
 ```python
