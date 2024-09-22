@@ -4,17 +4,20 @@ from typing import Callable
 from asyncio.streams import StreamReader, StreamWriter
 from hyperframe.frame import Frame
 
+from http_2.constant.protocol import HTTP1_1
+from http_2.context import HTTP1ConnectionContext, HTTP1RequestContext
 from http_2.protocol_change import ProtocolChange
 from http_2.client_reader import ClientReader
-from http_2.common_http_object import Http1Request
 from http_2.exception import NeedToChangeProtocolException
-from http_2.http1_response import StreamingResponse, GeneralHttp1Response, Response
-from http_2.http1_response import ChunkedResponseWriter, GeneralResponseWriter
+
+from http_2.internal.http1_request import Http1Request
+from http_2.internal.writer_selector import Http1ResponseWriterSelector
 
 
 async def send_frame(client_writer: StreamWriter, frame: Frame):
     client_writer.write(frame.serialize())
     await client_writer.drain()
+
 
 class Http1Connection:
 
@@ -25,9 +28,9 @@ class Http1Connection:
         self.msg = first_line_msg
 
     def should_keep_alive(self, http_request: Http1Request):
-        if http_request.http_version == 'HTTP/1.1':
+        if http_request.protocol == HTTP1_1:
             return True
-        if (http_request.http_version == 'HTTP/1' and
+        if (http_request.protocol == 'HTTP/1' and
                 http_request.headers.get('Connection') and
                 http_request.headers.get('Connection') == 'keep-alive'):
             return True
@@ -67,30 +70,20 @@ class Http1Connection:
                 )
 
     async def handle_request(self, dispatch: Callable) -> None:
+        connection_ctx = HTTP1ConnectionContext(self)
         previous_data_from_buffer = self.msg
         while True:
             client_msg = await self._reader.read_message(previous_data_from_buffer)
 
             http_request = Http1Request(client_msg)
 
+            request_ctx = HTTP1RequestContext(http_request)
+
             await self._maybe_protocol_upgrade(http_request)
-            req, res = await dispatch(http_request, None)
+            res = await dispatch(connection_ctx, request_ctx)
 
             await Http1ResponseWriterSelector.write(res, self._writer)
             if not self.should_keep_alive(http_request):
                 break
 
             previous_data_from_buffer = await self.should_continue()
-
-class Http1ResponseWriterSelector:
-
-    @staticmethod
-    async def write(response: Response, writer: StreamWriter):
-        if isinstance(response, StreamingResponse):
-            selected_writer = ChunkedResponseWriter(writer)
-            await selected_writer.write(response)
-        elif isinstance(response, GeneralHttp1Response):
-            selected_writer = GeneralResponseWriter(writer)
-            await selected_writer.write(response)
-        else:
-            raise NotImplemented(f'WriterSelector got unexpected response type {response}')

@@ -5,10 +5,10 @@ import socket
 from hyperframe.frame import SettingsFrame, HeadersFrame
 from collections import deque
 
+from http_2.public.request import HttpRequest
+from http_2.public.response import HttpResponse
 from http_2.exception import NeedToChangeProtocolException
-from http_2.common_http_object import GenericHttpRequest, GenericHttpResponse
 from http_2.status_code import StatusCode
-from http_2.http1_response import GeneralHttp1Response
 from http_2.server import Server, AsyncServerExecutor
 
 
@@ -26,8 +26,8 @@ async def server(server_port):
     http_localhost_server = Server(server_port)
 
     @http_localhost_server.route(path='/hello/ballo2', methods=['POST', 'GET'])
-    async def return_ok(http_request: GenericHttpRequest, http_response: GenericHttpResponse):
-        return GeneralHttp1Response(status_code=StatusCode.OK, body=RETURN_RESULT)
+    async def return_ok(http_request: HttpRequest, http_response: HttpResponse):
+        return HttpResponse(status_code=StatusCode.OK, body=RETURN_RESULT)
 
     executor = AsyncServerExecutor()
     executor.add_server(http_localhost_server)

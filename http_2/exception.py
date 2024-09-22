@@ -6,6 +6,10 @@ from hyperframe.frame import HeadersFrame
 from collections import deque
 
 
+class InternalServerError(Exception):
+    pass
+
+
 class UnknownProtocolException(Exception):
     pass
 

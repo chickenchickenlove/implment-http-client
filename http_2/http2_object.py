@@ -38,6 +38,7 @@ class Http2StreamState:
     # Boty server and client send END_STREAM FLAG. so Both can't send any request at all.
     CLOSE = 'CLOSED'
 
+
 class Http2StreamAction:
 
     UPDATE_HEADER = 'UPDATE_HEADER'
@@ -108,7 +109,6 @@ class Http2Stream:
     @property
     def state(self):
         return self._state
-
 
     def update(self):
         self._stream_status = Http2Stream.UPDATING
@@ -225,7 +225,7 @@ class Http2Stream:
             elif key == ':path':
                 headers['path'] = value
             elif key == ':scheme':
-                headers['protocol'] = 'HTTP/2.0'
+                headers['protocol'] = 'HTTP/2'
             elif key == ':authority':
                 headers['host'] = value
         return headers
@@ -495,13 +495,6 @@ class Http2Settings:
         if v := settings.get(Http2Settings.MAX_HEADER_LIST_SIZE):
             if v < 0:
                 raise SettingsValueException(GoAwayFrame(error_code=StreamErrorCode.PROTOCOL_ERROR.code))
-
-
-
-
-
-
-
 
 
 class TerminateAwareAsyncioQue:

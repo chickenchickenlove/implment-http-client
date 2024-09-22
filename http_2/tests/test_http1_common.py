@@ -2,13 +2,14 @@ import asyncio
 import pytest
 import socket
 
-from http_2.common_http_object import GenericHttpRequest, GenericHttpResponse
+from http_2.public.response import HttpResponse
+from http_2.public.request import HttpRequest
 from http_2.status_code import StatusCode
-from http_2.http1_response import GeneralHttp1Response
 from http_2.server import Server, AsyncServerExecutor
 
 RETURN_RESULT = '/HELLO_CALLED!'
 RESULT_400 = 'Invalid Request'
+RESULT_404 = 'Not Found'
 
 @pytest.fixture
 def server_port():
@@ -22,12 +23,12 @@ async def server(server_port):
     http_localhost_server = Server(server_port)
 
     @http_localhost_server.route(path='/hello', methods=['GET', 'POST'])
-    async def return_ok(http_request: GenericHttpRequest, http_response: GenericHttpResponse):
-        return GeneralHttp1Response(status_code=StatusCode.OK, body=RETURN_RESULT + http_request.body)
+    async def return_ok(http_request: HttpRequest, http_response: HttpResponse):
+        return HttpResponse(status_code=StatusCode.OK, body=RETURN_RESULT + http_request.body)
 
     @http_localhost_server.route(path='/400', methods=['GET', 'POST'])
-    async def return_400(http_request: GenericHttpRequest, http_response: GenericHttpResponse):
-        return GeneralHttp1Response(status_code=StatusCode.BAD_REQUEST, body=RESULT_400)
+    async def return_400(http_request: HttpRequest, http_response: HttpResponse):
+        return HttpResponse(status_code=StatusCode.BAD_REQUEST, body=RESULT_400)
 
     executor = AsyncServerExecutor()
     executor.add_server(http_localhost_server)
@@ -116,3 +117,23 @@ async def test_should_receive_400_with_get(server_port, server):
 
     assert stdout.decode() == expected_response
     assert 'HTTP/1.1 400 Bad Request' in stderr.decode()
+
+
+@pytest.mark.asyncio
+async def test_should_receive_404_with_no_existed_endpoint(server_port, server):
+    # Given
+    cmds = ['curl',
+            f'http://localhost:{server_port}/NO_EXISTED',
+            '-vvv',
+            ]
+
+    # When
+    process = await asyncio.create_subprocess_exec(
+        *cmds,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE
+    )
+
+    # Then
+    stdout, stderr = await process.communicate()
+    assert 'HTTP/1.1 404 Not Found' in stderr.decode()

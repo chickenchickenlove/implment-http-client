@@ -4,16 +4,19 @@ import hyperframe.frame
 from asyncio.streams import StreamReader, StreamWriter
 from hyperframe.frame import Frame, SettingsFrame, PriorityFrame, HeadersFrame, DataFrame, PushPromiseFrame, PingFrame, WindowUpdateFrame, GoAwayFrame, ContinuationFrame, RstStreamFrame, ExtensionFrame
 from hpack import Decoder, Encoder
-from typing import Self, Union, Optional, Callable
+from typing import Self, Union, Optional, Callable, cast
 
+from http_2.internal.http2_response import Http2Response
+from http_2.internal.http2_request import Http2Request
+from http_2.internal.request_converter import Http2RequestToHttpRequestConverter
+
+from http_2.context import HTTP2ConnectionContext, HTTP2RequestContext
 from http_2.exception import NeedToChangeProtocolException
 from http_2.flags import END_STREAM, END_HEADERS
 from http_2.interface import Http2ConnectionInterface
 from http_2.error_code import StreamErrorCode
 from http_2.http2_exception import Http2ConnectionError, StopConnectionException, SettingsValueException
 from http_2.http2_object import Http2Stream, Http2StreamQueue, Http2Settings, AsyncGenerator, TerminateAwareAsyncioQue
-from http_2.common_http_object import Http2Request, GenericHttpRequest, Http2ToGenericHttpRequestConverter, GenericHttpResponse, GenericHttpToHttp2ResponseConverter, Http2Response
-from http_2.status_code import StatusCode
 
 from frame_handler import HANDLER_STORE, HandlerStore
 
@@ -102,8 +105,9 @@ class Http2Connection:
         self.last_stream_id = 0
         self.last_frame: Union[None, HeadersFrame, DataFrame, ContinuationFrame] = None
         self.handler_store = handler_store
+        self._req_ctx_store: dict[int, HTTP2RequestContext] = {}
 
-        self._upgrade_obj: NeedToChangeProtocolException | None= upgrade_obj
+        self._upgrade_obj: NeedToChangeProtocolException | None = upgrade_obj
 
     # This method is for stopping all async generator by sending message 'TERMINATE'
     def _get_all_async_generator(self) -> list[TerminateAwareAsyncioQue]:
@@ -147,8 +151,7 @@ class Http2Connection:
 
         return False
 
-    async def parse_http2_frame(self):
-
+    async def parse_http2_frame(self, conn_ctx: HTTP2ConnectionContext):
         connection_callbacks = Http2ConnectionInterface(
             update_window_size=self.update_window_size,
             update_setting=self.update_setting,
@@ -266,7 +269,7 @@ class Http2Connection:
         if stream_id in self.streams_que.get_streams_in_que().keys():
             self.streams_que.cancel_stream(stream_id)
 
-    async def consume_complete_stream(self):
+    async def consume_complete_stream(self, conn_ctx: HTTP2ConnectionContext):
         try:
             async for completed_stream in AsyncGenerator(self.streams_que.get_streams()):
                 print(completed_stream)
@@ -277,14 +280,16 @@ class Http2Connection:
                 http2_request = Http2Request(completed_stream)
                 self.last_stream_id = completed_stream.stream_id
 
-                generic_request = Http2ToGenericHttpRequestConverter.convert(http2_request)
-                generic_response = GenericHttpResponse(StatusCode.OK, {}, '')
+                http_request = Http2RequestToHttpRequestConverter.convert(http2_request)
+                # generic_request = Http2ToGenericHttpRequestConverter.convert(http2_request)
 
-                generic_req, generic_res = await self.dispatch(generic_request, generic_response)
-                http2_response = GenericHttpToHttp2ResponseConverter.convert(generic_res)
+                req_ctx = self._req_ctx_store.get(stream_id)
+                req_ctx.request = http_request
+
+                res = await self.dispatch(conn_ctx, req_ctx)
+                http2_response = cast(Http2Response, res)
 
                 await self.send_response(http2_request, http2_response, self.writer)
-                # await self.dummy_response(http2_request, self.writer)
                 self.streams_que.add_closed_stream(stream_id)
 
         except asyncio.CancelledError as e:
@@ -319,7 +324,10 @@ class Http2Connection:
 
         # Header Frame does not care about window remain. It will not included to window size.
         response_headers_frame = HeadersFrame(stream_id=stream_id)
-        response_headers_frame.data = self.encoder.encode(http_response.response_headers)
+        try:
+            response_headers_frame.data = self.encoder.encode(http_response.headers)
+        except Exception as e:
+            print(e)
         response_headers_frame.flags.add(END_HEADERS)
 
         if not http_response.body:
@@ -353,9 +361,11 @@ class Http2Connection:
 
     def find_stream(self, stream_id, frame: Frame) -> Optional[Http2Stream]:
         if not (isinstance(frame, (RstStreamFrame, SettingsFrame, WindowUpdateFrame, ExtensionFrame))) and \
-                not self.streams_que.is_in_open(stream_id):
+           not self.streams_que.is_in_open(stream_id):
             new_stream = Http2Stream(stream_id, self.settings.get_client_connection_window())
+            new_req_ctx = HTTP2RequestContext(new_stream)
             self.streams_que.add_new_stream_in_open(stream_id, new_stream)
+            self._req_ctx_store[stream_id] = new_req_ctx
             self.subscribe(stream_id, new_stream.subscriber)
 
         if self.streams_que.is_in_open(stream_id):

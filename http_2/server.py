@@ -1,17 +1,28 @@
 import asyncio
+import logging
+import inspect
 
 from asyncio.streams import StreamReader, StreamWriter
 from typing import Callable
 
+from http_2.internal.http1_response import Http1Response, Http1StreamingResponse
+from http_2.internal.http2_response import Http2Response
+from http_2.internal.response_converter import RESPONSE_CONVERTER_STORE
+from http_2.resolver import ArgumentResolver
+from http_2.context import ConnectionContext, RequestContext, HTTP2ConnectionContext
 from http_2.protocol_verifier import ProtocolVerifier
 from http_2.data_structure import Trie
-from http_2.exception import UnknownProtocolException, NeedToChangeProtocolException
+from http_2.exception import UnknownProtocolException, NeedToChangeProtocolException, InternalServerError
+
+from http_2.public.response import HttpResponse
 from http_2.http1_connection import Http1Connection
 from http_2.http2_connection import Http2Connection
-from http_2.common_http_object import GenericHttpRequest, GenericHttpResponse, NeedToChangeProtocol
+from http_2.common_http_object import NeedToChangeProtocol
 from http_2.status_code import StatusCode
 from http_2.ssl_object import SSLConfig, IntegrateSSLConfig
 
+
+ProtocolAwareResponseType = Http1StreamingResponse | Http1Response | Http2Response
 
 class Server:
 
@@ -56,18 +67,39 @@ class Server:
         async with http_server:
             await asyncio.gather(http_server.serve_forever())
 
-    async def _dispatch(self, http_request: GenericHttpRequest, http_response: GenericHttpResponse):
-        path = http_request.path
-        func = self._url_context.get(http_request.method).search(path)
+    def get_required_args(self, func: Callable):
+        signature = inspect.signature(func)
+        return [name for name in signature.parameters.keys()]
+
+    async def _dispatch(self,
+                         connection_context: ConnectionContext,
+                         request_context: RequestContext) -> ProtocolAwareResponseType:
+
+        req = request_context.request
+        func = self._url_context.get(req.method).search(req.path)
 
         if not func:
-            http_response.status_code = StatusCode.NOT_FOUND
-            return http_request, http_response
+            err_msg = f'There is no endpoints under path {req.path}'
+            res = HttpResponse(status_code=StatusCode.NOT_FOUND,
+                               headers={'content-type': 'plain_text', 'content-length': len(err_msg)},
+                               body=err_msg)
+            converter = RESPONSE_CONVERTER_STORE.get_converter(req.protocol, res.headers)
+            return converter.convert(res)
         else:
             # TODO : 이걸 이용하면 Argument Resolve 가능함.
-            # func.__code__.co_varnames
-            response = await func(http_request, http_response)
-            return http_request, response
+            required_args = self.get_required_args(func)
+            annotations = inspect.get_annotations(func)
+
+            params = ArgumentResolver.resolve(required_args, annotations, connection_context, request_context)
+
+            try:
+                # HTTP/1.1 + HTTP/2에 응답을 어떻게 넣냐에 따라 달라진다.
+                res = await func(**params)
+                converter = RESPONSE_CONVERTER_STORE.get_converter(req.protocol, res.headers)
+                return converter.convert(res)
+            except Exception as e:
+                logging.error(f'Failed to dispatch. {e}')
+                raise InternalServerError()
 
     async def _handle(self,
                       client_reader: StreamReader,
@@ -86,11 +118,15 @@ class Server:
         try:
             match protocol:
                 case 'HTTP/2':
-                    connection = await Http2Connection.create(client_reader, client_writer, self._dispatch, upgrade_obj=upgrade_protocol)
+                    connection = await Http2Connection.create(client_reader,
+                                                              client_writer,
+                                                              self._dispatch,
+                                                              upgrade_obj=upgrade_protocol)
+                    conn_ctx = HTTP2ConnectionContext(connection)
                     try:
                         async with asyncio.TaskGroup() as tg:
-                            tg.create_task(connection.parse_http2_frame())
-                            tg.create_task(connection.consume_complete_stream())
+                            tg.create_task(connection.parse_http2_frame(conn_ctx))
+                            tg.create_task(connection.consume_complete_stream(conn_ctx))
                     except Exception as e:
                         print(f'Unexpected Exception occurs. error : {e}')
                     return
@@ -101,7 +137,8 @@ class Server:
         except NeedToChangeProtocolException as upgrade_protocol:
             raise upgrade_protocol
         except Exception as e:
-            print(f'handle request exception: {e}')
+            logging.error(f'handle request exception: {e}')
+            # print(f'handle request exception: {e}')
 
     async def handle_request(self,
                              client_reader: StreamReader,
