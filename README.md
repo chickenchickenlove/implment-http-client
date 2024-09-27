@@ -16,6 +16,10 @@ I implement this server to understand how low-level web works, low-level HTTP pr
 - 0.0.3
   - Support Connection Context and Request Context to inject parameters to endpoint methods.
   - Internal Refactoring.
+- 0.0.4
+  - Support `expect: 100-continue`. 
+  - Improve error handling when server receive invalid HTTP/1.1 request.
+  - Internal Refactoring.
 
 ### How to use
 ```python
@@ -70,6 +74,23 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+```
+
+### How to add your custom filters which is deal with `expect: 100-continue`
+```python
+from http_2.public.expect_continue_chains import CONTINUE_CHAINS, Continue100Chain
+from http_2.public.expect_continue_exception import UnauthorizedException
+
+@CONTINUE_CHAINS.add
+class ValidateUnauthorizedChain(Continue100Chain):
+
+  def __call__(self,
+               method: str,
+               uri: str,
+               protocol: str,
+               headers: dict[str, str]) -> None:
+    if 'jwt-token' in headers.keys() and headers['jwt-token'].lower() != 'abcdefg':
+      raise UnauthorizedException(f'Invalid JWT Token.')
 ```
 
 ### How to test
