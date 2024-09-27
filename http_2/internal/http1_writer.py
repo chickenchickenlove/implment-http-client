@@ -1,10 +1,14 @@
+import asyncio
 from abc import abstractmethod
 from asyncio.streams import StreamWriter
 from typing import cast
 
 from http_2.internal.interface_response import Response
+from http_2.internal.interface_writer import AbstractHttp1ResponseWriter
 from http_2.internal.http1_response import Http1StreamingResponse, Http1Response
-from http_2.public.writer import AbstractHttp1ResponseWriter
+from http_2.internal.common_headers import get_common_headers
+from http_2.exception import MaybeClientCloseConnectionOrBadRequestException
+
 
 # Chunked encoding 헤더에는 Transfer-Encoding: chunked가 표시되고, 본문은 chunk size+내용+chunk size+내용... 형식으로 표시된다.
 # Transfer-Encoding = chunked
@@ -31,6 +35,8 @@ class Http1ResponseWriter(AbstractHttp1ResponseWriter):
 
     async def _write_header_lines(self, response: Response):
         header_lines = ''
+        common_headers = get_common_headers()
+        response.headers.update(common_headers)
 
         for header_key, header_value in response.headers.items():
             header_line = f'{header_key}: {header_value}\r\n'
@@ -98,16 +104,28 @@ class ChunkedResponseWriter(Http1ResponseWriter):
         await super()._write_header_lines(response)
 
     async def _write_body(self, response: Http1StreamingResponse):
-        while True:
-            body = await response.next_response()
-            body = str(body)
-            if not body:
-                self._writer.write(b'0\r\n\r\n')
-                await self._writer.drain()
-                break
+        try:
+            while True:
+                # If the server's async generator gets stuck, the Server-Sent Event connection
+                # could potentially remain open indefinitely. Therefore, after applying a timeout,
+                # if the next chunk is not received within the appropriate time frame,
+                # the server should raise an error and terminate the connection.
+                coro = response.next_response()
+                body = await asyncio.wait_for(coro, timeout=5)
+                body = str(body)
+                if not body:
+                    self._writer.write(b'0\r\n\r\n')
+                    await self._writer.drain()
+                    break
 
-            encoded_body = body.encode()
-            # Chunk size should be hex type. note -> :x
-            encoded_length = f"{len(encoded_body):x}".encode(response.encoding)
-            self._writer.write(encoded_length + b'\r\n' + encoded_body + b'\r\n')
-            await self._writer.drain()
+                encoded_body = body.encode()
+                # Chunk size should be hex type. note -> :x
+                encoded_length = f"{len(encoded_body):x}".encode(response.encoding)
+                self._writer.write(encoded_length + b'\r\n' + encoded_body + b'\r\n')
+                await self._writer.drain()
+        except (BrokenPipeError, ConnectionResetError) as e:
+            raise MaybeClientCloseConnectionOrBadRequestException(
+                'Client might close connection during server send a chunked streaming.')
+        except asyncio.TimeoutError as e:
+            raise MaybeClientCloseConnectionOrBadRequestException(
+                'The async generator in server for server-sent event seems to be stuck.')

@@ -10,15 +10,15 @@ from http_2.status_code import StatusCode
 
 async def main():
 
-    localhost_ssl_config = SSLConfig()
-    localhost_ssl_config.add_tls_with_hostname(
-        hostname='localhost',
-        certfile_path='...',
-        keyfile_path='...')
-
     example_com_ssl_config = SSLConfig()
     example_com_ssl_config.add_tls_with_hostname(
         hostname='example.com',
+        certfile_path='...',
+        keyfile_path='...')
+
+    localhost_ssl_config = SSLConfig()
+    localhost_ssl_config.add_tls_with_hostname(
+        hostname='localhost',
         certfile_path='...',
         keyfile_path='...')
 
@@ -38,6 +38,7 @@ async def main():
         return StreamingResponse(gen_events())
 
     @http_localhost_server.get_mapping(path='/common')
+    @http_localhost_server.post_mapping(path='/common')
     @example_com_server.route(path='/common', methods=['POST', 'GET'])
     @localhost_server.route(path='/common', methods=['POST', 'GET'])
     async def common(http_request: HttpRequest, http_response: HttpResponse) -> HttpResponse:

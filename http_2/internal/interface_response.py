@@ -1,30 +1,33 @@
-from abc import abstractmethod, ABC
+from typing import Literal
 
+from abc import abstractmethod, ABC
+from http_2.type.http_object import HeaderType
+from http_2.status_code import StatusCode
 
 class Response(ABC):
 
     @property
     @abstractmethod
-    def protocol(self):
+    def protocol(self) -> Literal['HTTP/1', 'HTTP/1.1', 'HTTP/2']:
         pass
 
     @property
     @abstractmethod
-    def status_code(self):
+    def status_code(self) -> StatusCode:
         pass
 
     @property
     @abstractmethod
-    def headers(self):
+    def headers(self) -> HeaderType:
         pass
 
     @property
     @abstractmethod
-    def body(self):
+    def body(self) -> str:
         pass
 
     @abstractmethod
-    def has_body(self):
+    def has_body(self) -> bool:
         pass
 
 

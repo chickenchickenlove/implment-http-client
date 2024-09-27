@@ -1,23 +1,28 @@
-from typing import Union
-
 from http_2.type.http_object import HeaderType, QueryParamsType
 from http_2.internal.interface_request import Request
+from http_2.public.expect_continue_chains import CONTINUE_CHAINS
 
 
 class Http1Request(Request):
 
+    # uri : Path + Query Parameters
     def __init__(self,
-                 msg_dict: dict[str, Union[str, dict]]):
-        if 'method' in msg_dict.keys():
-            self._method: str = msg_dict['method']
-        if 'uri' in msg_dict.keys():
-            self._uri: str = msg_dict['uri']
-        if 'http_version' in msg_dict.keys():
-            self._protocol: str = msg_dict['http_version']
-        if 'headers' in msg_dict.keys():
-            self._headers: dict[str, Union[str, dict]] = msg_dict['headers']
-        if 'body' in msg_dict.keys():
-            self._body: str = msg_dict['body']
+                 method: str,
+                 uri: str,
+                 protocol: str,
+                 headers: dict[str, str]):
+
+        self._method = method
+        self._uri = uri
+        self._protocol = protocol
+        self._headers = headers
+        self._body = ''
+
+        self._have_expect_header = 'expect' in headers.keys()
+
+        self._100_continue = self._have_expect_header and headers['expect']
+        self._100_continue_chains = CONTINUE_CHAINS
+
 
     @property
     def method(self) -> str:
@@ -39,6 +44,10 @@ class Http1Request(Request):
     def body(self) -> str:
         return self._body
 
+    @body.setter
+    def body(self, contents: str):
+        self._body = contents
+
     @property
     def path(self) -> str:
         return self._uri.split('?')[0]
@@ -53,3 +62,14 @@ class Http1Request(Request):
                 k, v = query_param.split('=')
                 query_params_dict[k] = v
         return query_params_dict
+
+
+    def expect_100_continue(self) -> bool:
+        return self._have_expect_header
+
+    # Chain raise error to change context switching.
+    def execute_chains_100_continue(self) -> None:
+        self._100_continue_chains.execute(self._method,
+                                          self._uri,
+                                          self._protocol,
+                                          self._headers)

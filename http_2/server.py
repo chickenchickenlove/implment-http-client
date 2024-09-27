@@ -5,9 +5,13 @@ import inspect
 from asyncio.streams import StreamReader, StreamWriter
 from typing import Callable
 
+from http_2.exception import NeedResponseToClientRightAwayException, MaybeClientCloseConnectionOrBadRequestException
+from http_2.exception import ClientDoNotSendAnyMessageException
+from http_2.internal.common_headers import get_common_headers
 from http_2.internal.http1_response import Http1Response, Http1StreamingResponse
 from http_2.internal.http2_response import Http2Response
 from http_2.internal.response_converter import RESPONSE_CONVERTER_STORE
+from http_2.internal.writer_selector import Http1ResponseWriterSelector
 from http_2.resolver import ArgumentResolver
 from http_2.context import ConnectionContext, RequestContext, HTTP2ConnectionContext
 from http_2.protocol_verifier import ProtocolVerifier
@@ -72,8 +76,8 @@ class Server:
         return [name for name in signature.parameters.keys()]
 
     async def _dispatch(self,
-                         connection_context: ConnectionContext,
-                         request_context: RequestContext) -> ProtocolAwareResponseType:
+                        connection_context: ConnectionContext,
+                        request_context: RequestContext) -> ProtocolAwareResponseType:
 
         req = request_context.request
         func = self._url_context.get(req.method).search(req.path)
@@ -81,7 +85,7 @@ class Server:
         if not func:
             err_msg = f'There is no endpoints under path {req.path}'
             res = HttpResponse(status_code=StatusCode.NOT_FOUND,
-                               headers={'content-type': 'plain_text', 'content-length': len(err_msg)},
+                               headers={},
                                body=err_msg)
             converter = RESPONSE_CONVERTER_STORE.get_converter(req.protocol, res.headers)
             return converter.convert(res)
@@ -109,10 +113,10 @@ class Server:
 
         try:
             protocol, first_line = await ProtocolVerifier.ensure_protocol(client_reader)
+        except ClientDoNotSendAnyMessageException as e:
+            return
         except UnknownProtocolException as e:
-            print('Client sent message with unknown protocol.')
-            client_writer.close()
-            await client_writer.wait_closed()
+            logging.warning('Server got message with unknown protocol.')
             return
 
         try:
@@ -132,13 +136,26 @@ class Server:
                     return
                 case 'HTTP/1':
                     await Http1Connection(client_reader, client_writer, first_line).handle_request(self._dispatch)
+                case 'HTTP/1.1':
+                    await Http1Connection(client_reader, client_writer, first_line).handle_request(self._dispatch)
                 case _:
-                    print('UNKNOWN PROTOCOL')
+                    logging.warning('Server got message with unknown protocol.')
         except NeedToChangeProtocolException as upgrade_protocol:
             raise upgrade_protocol
+        except MaybeClientCloseConnectionOrBadRequestException as e:
+            logging.info(e.response_msg)
+        except NeedResponseToClientRightAwayException as e:
+            common_headers = get_common_headers()
+            if protocol == 'HTTP/2':
+                # TODO : Headers 추가
+                res = Http2Response(e.status_code, headers=common_headers, body=e.response_msg)
+            else:
+                # TODO : Headers 추가
+                res = Http1Response(e.status_code, headers=common_headers, body=e.response_msg)
+            await Http1ResponseWriterSelector.write(res, client_writer)
+
         except Exception as e:
             logging.error(f'handle request exception: {e}')
-            # print(f'handle request exception: {e}')
 
     async def handle_request(self,
                              client_reader: StreamReader,
@@ -150,15 +167,15 @@ class Server:
             await client_writer.drain()
             await self._handle(client_reader, client_writer, upgrade_protocol)
         except Exception as e:
-            print(f'handle request exception: {e}')
+            logging.warning(f'handle request exception: {e}')
         finally:
             try:
                 client_writer.close()
                 await client_writer.wait_closed()
             except (BrokenPipeError, ConnectionResetError) as e:
-                print(f'Client already closed connection.')
+                logging.warning(f'Client already closed connection.')
             except Exception as e:
-                print(e)
+                logging.warning(f'Error occurs during closing connection after handle_request was failed to executed. {e}')
 
     def route(self, path: str, methods: list[str]) -> Callable:
         def decorator(func):

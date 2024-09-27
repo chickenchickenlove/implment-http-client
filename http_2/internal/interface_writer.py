@@ -24,6 +24,7 @@ class AbstractHttp1ResponseWriter(ABC):
     async def _write_body(self, response: Response):
         pass
 
+
     def get_extra_info(self, key: str):
         if hasattr(self, '_writer'):
             writer = getattr(self, '_writer')

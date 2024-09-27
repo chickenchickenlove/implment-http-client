@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp
 import pytest
 import socket
 
@@ -22,7 +23,7 @@ async def server(server_port):
     async def return_ok(http_request: HttpRequest, http_response: HttpResponse):
         async def gen_contents():
             for i in range(5):
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(0.5)
                 yield i
         return StreamingResponse(gen_contents(), media_type='text/event-stream')
 
