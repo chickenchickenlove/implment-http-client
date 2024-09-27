@@ -96,6 +96,8 @@ class Http1Connection:
             if http_request.expect_100_continue():
                 try:
                     http_request.execute_chains_100_continue()
+                    self._writer.write(b'HTTP/1.1 100 Continue\r\n\r\n')
+                    await self._writer.drain()
                 except NeedResponseToClientRightAwayException as e:
                     # TODO: Catch Exception and write response -> Response and continue
                     raise e

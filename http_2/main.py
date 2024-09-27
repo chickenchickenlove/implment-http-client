@@ -38,6 +38,7 @@ async def main():
         return StreamingResponse(gen_events())
 
     @http_localhost_server.get_mapping(path='/common')
+    @http_localhost_server.post_mapping(path='/common')
     @example_com_server.route(path='/common', methods=['POST', 'GET'])
     @localhost_server.route(path='/common', methods=['POST', 'GET'])
     async def common(http_request: HttpRequest, http_response: HttpResponse) -> HttpResponse:

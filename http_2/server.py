@@ -85,7 +85,7 @@ class Server:
         if not func:
             err_msg = f'There is no endpoints under path {req.path}'
             res = HttpResponse(status_code=StatusCode.NOT_FOUND,
-                               headers={'content-type': 'plain-text', 'content-length': len(err_msg)},
+                               headers={},
                                body=err_msg)
             converter = RESPONSE_CONVERTER_STORE.get_converter(req.protocol, res.headers)
             return converter.convert(res)

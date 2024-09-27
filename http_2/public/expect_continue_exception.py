@@ -14,7 +14,7 @@ class ExpectationFailedException(NeedResponseToClientRightAwayException):
 
     @property
     def response_msg(self) -> str:
-        raise self._response_msg
+        return self._response_msg
 
 
 class UnauthorizedException(NeedResponseToClientRightAwayException):

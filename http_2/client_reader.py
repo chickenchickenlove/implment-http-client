@@ -57,6 +57,8 @@ class Http1Reader(HttpReader):
             except asyncio.TimeoutError:
                 raise MaybeClientCloseConnectionOrBadRequestException('Failed to read request line because of timeout.')
 
+        if not data:
+            raise MaybeClientCloseConnectionOrBadRequestException('Client send a signal to server to close connection.')
         data = data.decode().rstrip('\r\n')
 
         try:
