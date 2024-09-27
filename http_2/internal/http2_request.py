@@ -57,17 +57,3 @@ class Http2Request(Request):
                 k, v = query_param.split('=')
                 query_params_dict[k] = v
         return query_params_dict
-
-
-
-
-
-# class GenericHttpToHttp2ResponseConverter:
-#
-#     @staticmethod
-#     def convert(original_response: GenericHttpResponse) -> Http2Response:
-#         return Http2Response(
-#             original_response.status_code.status_code,
-#             original_response.headers,
-#             original_response.body
-#         )

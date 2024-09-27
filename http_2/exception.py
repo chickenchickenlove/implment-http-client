@@ -5,6 +5,80 @@ from hyperframe.frame import SettingsFrame
 from hyperframe.frame import HeadersFrame
 from collections import deque
 
+from http_2.status_code import StatusCode
+
+
+class NeedResponseToClientRightAwayException(Exception):
+
+    @property
+    def status_code(self) -> StatusCode:
+        raise NotImplementedError('It is not implemented with intention. you should use subclass.')
+
+    @property
+    def response_msg(self) -> str:
+        raise NotImplementedError('It is not implemented with intention. you should use subclass.')
+
+class NoNeedResponseToClientException(Exception):
+
+    @property
+    def response_msg(self) -> str:
+        raise NotImplementedError('It is not implemented with intention. you should use subclass.')
+
+
+
+class ClientDoNotSendAnyMessageException(NoNeedResponseToClientException):
+
+    def __init__(self, msg: str):
+        self._response_msg = msg
+
+    @property
+    def response_msg(self) -> str:
+        return self._response_msg
+
+
+class RequestTimeoutException(NeedResponseToClientRightAwayException):
+    def __init__(self, msg: str):
+        self._status_code = StatusCode.REQUEST_TIMEOUT
+        self._response_msg = msg
+
+    @property
+    def status_code(self) -> StatusCode:
+        return self._status_code
+
+    @property
+    def response_msg(self) -> str:
+        return self._response_msg
+
+
+class InvalidRequestBodyException(NeedResponseToClientRightAwayException):
+    def __init__(self, msg: str):
+        self._status_code = StatusCode.BAD_REQUEST
+        self._response_msg = msg
+
+    @property
+    def status_code(self) -> StatusCode:
+        return self._status_code
+
+    @property
+    def response_msg(self) -> str:
+        return self._response_msg
+
+
+
+class MaybeClientCloseConnectionOrBadRequestException(NeedResponseToClientRightAwayException):
+
+    def __init__(self, msg: str):
+        self._status_code = StatusCode.BAD_REQUEST
+        self._response_msg = msg
+
+    @property
+    def status_code(self) -> StatusCode:
+        return self._status_code
+
+    @property
+    def response_msg(self) -> str:
+        return self._response_msg
+
 
 class InternalServerError(Exception):
     pass

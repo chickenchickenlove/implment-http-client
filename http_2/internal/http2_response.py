@@ -1,6 +1,9 @@
+from typing import Literal
 from http_2.status_code import StatusCode
 from http_2.internal.interface_response import Response
+from http_2.type.http_object import HeaderType
 
+from http_2.status_code import StatusCode
 from http_2.type.http_object import HeaderType
 from http_2.constant.protocol import HTTP2
 
@@ -38,21 +41,20 @@ class Http2Response(Response):
                 raise RuntimeError('fInvalid HTTP/2 Response header name. header name : {key}')
 
     @property
-    def protocol(self):
+    def protocol(self) -> Literal['HTTP/2']:
         return self._protocol
 
     @property
-    def status_code(self):
+    def status_code(self) -> StatusCode:
         return self._status_code
 
     @property
-    def headers(self):
-        print('here')
+    def headers(self) -> HeaderType:
         return self._headers
 
     @property
-    def body(self):
+    def body(self) -> str:
         return self._body
 
-    def has_body(self):
+    def has_body(self) -> bool:
         return len(self._body) > 0

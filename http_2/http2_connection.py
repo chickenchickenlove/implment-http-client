@@ -1,4 +1,6 @@
 import asyncio
+import logging
+
 import hyperframe.frame
 
 from asyncio.streams import StreamReader, StreamWriter
@@ -9,6 +11,7 @@ from typing import Self, Union, Optional, Callable, cast
 from http_2.internal.http2_response import Http2Response
 from http_2.internal.http2_request import Http2Request
 from http_2.internal.request_converter import Http2RequestToHttpRequestConverter
+from http_2.internal.common_headers import get_common_headers
 
 from http_2.context import HTTP2ConnectionContext, HTTP2RequestContext
 from http_2.exception import NeedToChangeProtocolException
@@ -141,7 +144,7 @@ class Http2Connection:
             return True
 
         if frame.stream_id > 0 and self.settings.max_concurrent_streams() < self.streams_que.total_qsize() + 1:
-            print('MAX REFUSED CONCURRENT STREAM VIOLATION')
+            logging.warning('MAX REFUSED CONCURRENT STREAM VIOLATION')
             await self.send_rst_stream_frame(frame.stream_id, error_code=StreamErrorCode.REFUSED_STREAM)
             return True
 
@@ -325,6 +328,8 @@ class Http2Connection:
         # Header Frame does not care about window remain. It will not included to window size.
         response_headers_frame = HeadersFrame(stream_id=stream_id)
         try:
+            common_headers = get_common_headers()
+            http_response.headers.update(common_headers)
             response_headers_frame.data = self.encoder.encode(http_response.headers)
         except Exception as e:
             print(e)

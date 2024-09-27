@@ -10,15 +10,15 @@ from http_2.status_code import StatusCode
 
 async def main():
 
-    localhost_ssl_config = SSLConfig()
-    localhost_ssl_config.add_tls_with_hostname(
-        hostname='localhost',
-        certfile_path='...',
-        keyfile_path='...')
-
     example_com_ssl_config = SSLConfig()
     example_com_ssl_config.add_tls_with_hostname(
         hostname='example.com',
+        certfile_path='...',
+        keyfile_path='...')
+
+    localhost_ssl_config = SSLConfig()
+    localhost_ssl_config.add_tls_with_hostname(
+        hostname='localhost',
         certfile_path='...',
         keyfile_path='...')
 
